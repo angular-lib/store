@@ -1,16 +1,12 @@
-# @angular-libs/store
-
 Reactive state management library powered by Angular Signals.
 
 [Stackblitz demo](https://stackblitz.com/edit/angular-libs-store?file=src%2Fmain.ts,src%2Fmain.html)
 
 **Features**
 
-- Synchronous in-memory `ALStore` and `ALStorage` (`localStorage` / `sessionStorage` / custom).
+- In-memory `ALStore` and persistent `ALStorage` (`localStorage` / `sessionStorage` / custom).
 - Extensible via highly typed adapters: `EntityAdapter` (for array/collections), `ResourceAdapter` (for async/HTTP integration), and `HistoryAdapter` (for undo/redo).
 - Automatic cross-tab sync (via `BroadcastChannel` or native `storage` events).
-
-`npm install @angular-libs/store`
 
 ---
 
@@ -293,7 +289,7 @@ export class DocumentStore extends ALStore<State> {
 - `clear()`: Clears all explicitly set state, reverting everything back to `initialState`.
 - `has(key)`: Checks if a key currently exists explicitly in the store.
 
-### Proteced Adapter Methods
+### Protected Adapter Methods
 
 - `entityAdapter(key, options)`
 - `resourceAdapter(key, options)`
@@ -303,24 +299,116 @@ export class DocumentStore extends ALStore<State> {
 
 ## 🤖 AI / GitHub Copilot Instructions
 
-Want to generate your stores automatically? Copy the prompt below and paste it into GitHub Copilot or your AI assistant of choice!
+Want to generate your stores automatically? Copy the prompt below and paste it into GitHub Copilot, or save it to your project's AI rules file (such as `.cursorrules`, `.windsurfrules`, or `.github/copilot-instructions.md`) to teach your AI assistant how to use this library across your entire project.
 
 <details>
-<summary><b>Click to copy the Copilot Prompt</b></summary>
+<summary><b>Click to view the AI Rules</b></summary>
 
-```text
-Create an Angular 20+ state management service using "@angular-libs/store".
+````markdown
+# State Management AI Rules
 
-Requirements:
-1. Extend `ALStore<AppState>` (or `ALStorage<AppState>` if it needs persistence).
-2. Define an interface `AppState` encompassing my domain requirements.
-3. Define an `initialState` object.
-4. Call `super(initialState)` in the constructor.
-5. Use `this.entityAdapter('key', { idField: 'id' })` for arrays/collections.
-6. Use `this.resourceAdapter('key', { params, loader })` for fetching async API data.
-7. Use `this.historyAdapter('key')` for undo/redo requirements.
-8. Add wrapper methods calling `this.update('primitiveKey', fn)` to alter simple scalar variables.
+When creating or interacting with state management in this project, ALWAYS use `@angular-libs/store`.
+Do NOT use NgRx, Akita, or plain BehaviorSubjects for stores.
+
+## 1. Creating a Store
+
+- **Base Class**: Extend `ALStore<AppState>` (in-memory) or `ALStorage<AppState>` (persistent).
+- **Setup**: Define an interface `AppState` and a strongly-typed `initialState` object. Call `super(initialState)` in the `@Injectable({ providedIn: 'root' })` class constructor.
+- **Adapters**:
+  - _Collections/Arrays_: `myEntities = this.entityAdapter('key', { idField: 'id' })`
+  - _Async Data/API HTTP_: `myRes = this.resourceAdapter('key', { params, loader })`
+  - _Time Travel_: `myHistory = this.historyAdapter('key')`
+
+## 2. Consuming & Mutating in Components
+
+- Access state natively as Signals: `myVal = this.store.getSignal('key')`.
+- For adapters, use their properties directly: `this.store.myEntities.items()` or `this.store.myRes.isLoading()`.
+- **Mutations**: Call `this.store.set('key', value)` or `this.store.update('key', fn)` directly from components for simple state changes. Only write custom methods in the store for complex/multi-key logic.
+- **Constraint**: DO NOT use RxJS observables or `.subscribe()` for state consumption; rely exclusively on Angular Signals.
+
+## 3. Reference Example
+
+```typescript
+import { Component, inject, Injectable } from '@angular/core';
+import { ALStore } from '@angular-libs/store';
+
+// 1. Define State & Initial Values
+interface Todo {
+  id: number;
+  title: string;
+  done: boolean;
+}
+interface AppState {
+  todos: Todo[];
+  filter: 'all' | 'pending';
+}
+const initialState: AppState = { todos: [], filter: 'all' };
+
+// 2. Create Store (No boilerplate required!)
+@Injectable({ providedIn: 'root' })
+export class TodoStore extends ALStore<AppState> {
+  // Fetch reactively; automatically refetches when 'filter' signal changes
+  todoResource = this.resourceAdapter('todos', {
+    params: () => ({ filter: this.getSignal('filter')() }),
+    loader: async ({ params, abortSignal }) => {
+      const res = await fetch(`/api/todos?filter=${params.filter}`, { signal: abortSignal });
+      return res.json();
+    },
+  });
+
+  // Bind adapters for collections to automatically get CRUD methods
+  todos = this.entityAdapter('todos', { idField: 'id' });
+  // Instantly add Undo/Redo capabilities to the todos array!
+  todoHistory = this.historyAdapter('todos', { limit: 10 });
+
+  constructor() {
+    super(initialState);
+  }
+}
+
+// 3. Consume & Mutate in Component
+@Component({
+  selector: 'app-todos',
+  standalone: true,
+  template: `
+    <!-- Simple scalar updates -->
+    <button (click)="store.set('filter', filter() === 'all' ? 'pending' : 'all')">
+      Toggle Filter (Current: {{ filter() }})
+    </button>
+
+    <!-- HistoryAdapter Undo/Redo -->
+    <button [disabled]="!store.todoHistory.canUndo()" (click)="store.todoHistory.undo()">
+      Undo
+    </button>
+    <button [disabled]="!store.todoHistory.canRedo()" (click)="store.todoHistory.redo()">
+      Redo
+    </button>
+
+    <!-- ResourceAdapter loading state -->
+    @if (store.todoResource.isLoading()) {
+      <p>Loading todos...</p>
+    }
+
+    <!-- Adapter usage (Signal access & mutations) -->
+    @for (todo of store.todos.items(); track todo.id) {
+      <div>
+        {{ todo.title }} - {{ todo.done ? 'Done' : 'Open' }}
+        <button (click)="store.todos.update(todo.id, { done: true })">Complete</button>
+        <button (click)="store.todos.remove(todo.id)">Delete</button>
+      </div>
+    }
+
+    <button (click)="store.todos.upsert({ id: Date.now(), title: 'New', done: false })">
+      Add Todo
+    </button>
+  `,
+})
+export class TodoComponent {
+  store = inject(TodoStore);
+  filter = this.store.getSignal('filter'); // Signal<"all" | "pending">
+}
 ```
+````
 
 </details>
 

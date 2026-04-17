@@ -1,6 +1,6 @@
 {
   "name": "@angular-libs/store",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "An OOP-based Angular Signal state management solution. A lightweight alternative to stores like NgRx SignalStore. Featuring built-in entity management, native resource API integration (resource adapter), undo/redo history adapters, and cross-tab synchronization.",
   "repository": {
     "type": "git",

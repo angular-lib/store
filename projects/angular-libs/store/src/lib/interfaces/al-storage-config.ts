@@ -15,4 +15,18 @@ export interface ALStorageConfig {
    * @default () => localStorage
    */
   storageFactory: () => Storage | undefined;
+
+  /**
+   * An optional prefix to prepend to all keys when saving to and reading from storage.
+   * Useful to prevent naming collisions when multiple apps share the same domain.
+   *
+   * @example
+   * ```typescript
+   * const config: ALStorageConfig = {
+   *   storageFactory: () => window.localStorage,
+   *   prefix: 'my_app_'
+   * };
+   * ```
+   */
+  prefix?: string;
 }

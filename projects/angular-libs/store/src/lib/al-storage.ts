@@ -123,6 +123,7 @@ export abstract class ALStorage<T extends Record<string, any> = {}> implements I
   protected initialState: T;
   private destroyRef = inject(DestroyRef);
   private injector = inject(Injector);
+  private prefix = '';
 
   constructor(initialState?: T, configOverride?: Partial<ALStorageConfig>) {
     const config = inject(SIGNAL_STORAGE_CONFIG, { optional: true });
@@ -130,6 +131,7 @@ export abstract class ALStorage<T extends Record<string, any> = {}> implements I
     this.initialState = initialState || ({} as T);
     const mergedConfig = { ...DEFAULT_CONFIG, ...(config || {}), ...(configOverride || {}) };
     this.storage = mergedConfig.storageFactory();
+    this.prefix = mergedConfig.prefix || '';
 
     if (typeof window !== 'undefined') {
       if (this.storage) {
@@ -141,7 +143,11 @@ export abstract class ALStorage<T extends Record<string, any> = {}> implements I
               this.updateSignalWithInitialState(key);
             }
           } else {
-            const typedKey = event.key as keyof T;
+            if (!event.key.startsWith(this.prefix)) {
+              return;
+            }
+
+            const typedKey = event.key.slice(this.prefix.length) as keyof T;
             if (this.signals.has(typedKey)) {
               if (event.newValue === null) {
                 this.updateSignalWithInitialState(typedKey);
@@ -178,12 +184,16 @@ export abstract class ALStorage<T extends Record<string, any> = {}> implements I
     return Array.from(keys);
   }
 
+  private getPrefixedKey(key: keyof T): string {
+    return `${this.prefix}${String(key)}`;
+  }
+
   get<K extends keyof T>(key: K): T[K] {
     if (!this.storage) {
       return this.initialState?.[key] as T[K];
     }
 
-    const item = this.storage.getItem(key as string);
+    const item = this.storage.getItem(this.getPrefixedKey(key));
     if (item !== null && item !== undefined) {
       try {
         return JSON.parse(item) as T[K];
@@ -209,16 +219,17 @@ export abstract class ALStorage<T extends Record<string, any> = {}> implements I
     }
 
     const valueString = JSON.stringify(value);
+    const prefixedKey = this.getPrefixedKey(key);
 
     // Structural equality check to prevent redundant writes and infinite reactivity loops.
-    const currentString = this.storage.getItem(key as string);
+    const currentString = this.storage.getItem(prefixedKey);
 
     if (currentString === valueString) {
       return;
     }
 
     try {
-      this.storage.setItem(key as string, valueString);
+      this.storage.setItem(prefixedKey, valueString);
     } catch (e) {
       console.error(
         `Error saving to storage for key "${String(key)}". Storage quota may be exceeded.`,
@@ -239,12 +250,12 @@ export abstract class ALStorage<T extends Record<string, any> = {}> implements I
   remove<K extends keyof T>(key: K): void {
     if (!this.storage) return;
 
-    this.storage.removeItem(key as string);
+    this.storage.removeItem(this.getPrefixedKey(key));
     this.updateSignalWithInitialState(key);
   }
 
   has<K extends keyof T>(key: K): boolean {
-    return this.storage?.getItem(key as string) != null;
+    return this.storage?.getItem(this.getPrefixedKey(key)) != null;
   }
 
   /**
@@ -343,9 +354,25 @@ export abstract class ALStorage<T extends Record<string, any> = {}> implements I
   clear(): void {
     if (!this.storage) return;
 
-    for (const key of this.getManagedKeys()) {
-      this.storage.removeItem(key as string);
+    if (this.prefix) {
+      // With a prefix, we can safely wipe out all matching keys from storage.
+      // This ensures we don't leave dangling data if the `T` schema changes over time.
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < this.storage.length; i++) {
+        const key = this.storage.key(i);
+        if (key && key.startsWith(this.prefix)) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach((k) => this.storage!.removeItem(k));
+    } else {
+      // Without a prefix, blindly clearing could destroy data belonging to other apps on the domain.
+      // For safety, tightly restrict removal to the schema keys we definitely know about.
+      for (const key of this.getManagedKeys()) {
+        this.storage.removeItem(this.getPrefixedKey(key));
+      }
     }
+
     for (const key of this.signals.keys()) {
       this.updateSignalWithInitialState(key);
     }
