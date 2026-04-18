@@ -1,17 +1,55 @@
 import { computed, Signal } from '@angular/core';
-import { EntityAdapter, EntityAdapterOptions, Update } from '../interfaces/entity-adapter';
+import { EntityAdapter, EntityAdapterOptions, Update } from '../interfaces/entity.adapter';
 import { IALStore } from '../interfaces/ial-store';
 
+/**
+ * Creates an entity adapter for managing collections of entities within an ALStore.
+ * Provides a standardized set of methods (add, update, remove, etc.) to manipulate
+ * array-based state and signals to read the state.
+ *
+ * @template StoreState The overall state interface of the store.
+ * @template Key The specific key in the store state corresponding to this entity collection.
+ * @template T The entity type.
+ * @template ID The identifier type for the entity (e.g., string or number).
+ *
+ * @param store The ALStore instance managing the state.
+ * @param key The state property key corresponding to the entity array.
+ * @param options Configuration options including ID selection and sorting.
+ * @returns An EntityAdapter object with state signals and mutation methods.
+ *
+ * @example
+ * ```ts
+ * interface User { id: number; name: string; }
+ * interface AppState { users: User[]; }
+ *
+ * const initialState: AppState = { users: [] };
+ *
+ * @Injectable({ providedIn: 'root' })
+ * export class UserStore extends ALStore<AppState> {
+ *   // Create the adapter, using `this.storeRef` to correctly infer types
+ *   users = createEntityAdapter(this.storeRef, 'users', { idField: 'id' });
+ *
+ *   constructor() {
+ *     super(initialState); // Initialize the state
+ *   }
+ *
+ *   // Use adapter methods to mutate the state
+ *   registerUser(user: User) {
+ *     this.users.addOne(user);
+ *   }
+ * }
+ * ```
+ */
 export function createEntityAdapter<
   StoreState extends Record<string, any>,
   Key extends keyof StoreState,
-  T = StoreState[Key] extends Array<infer U> ? U : any,
   ID extends string | number = string | number,
 >(
   store: IALStore<StoreState>,
   key: Key,
-  options: EntityAdapterOptions<T, ID> = {} as any,
-): EntityAdapter<T, ID> {
+  options: EntityAdapterOptions<StoreState[Key] extends Array<infer U> ? U : any, ID> = {} as any,
+): EntityAdapter<StoreState[Key] extends Array<infer U> ? U : any, ID> {
+  type T = StoreState[Key] extends Array<infer U> ? U : Record<string, any>;
   const selectId: (entity: T) => ID =
     options.selectId ||
     (options.idField
@@ -106,7 +144,7 @@ export function createEntityAdapter<
         if (index === -1) return arr;
 
         const newArr = [...arr];
-        newArr[index] = { ...newArr[index], ...update.changes };
+        newArr[index] = { ...(newArr[index] as any), ...(update.changes as any) };
         return sortIfNeeded(newArr);
       });
     },
@@ -120,7 +158,7 @@ export function createEntityAdapter<
         for (const update of updates) {
           const index = newArr.findIndex((item) => selectId(item) === update.id);
           if (index > -1) {
-            newArr[index] = { ...newArr[index], ...update.changes };
+            newArr[index] = { ...(newArr[index] as any), ...(update.changes as any) };
             hasChanges = true;
           }
         }
@@ -135,7 +173,7 @@ export function createEntityAdapter<
 
         const newArr = [...arr];
         if (index > -1) {
-          newArr[index] = { ...newArr[index], ...entity };
+          newArr[index] = { ...(newArr[index] as any), ...(entity as any) };
         } else {
           newArr.push(entity);
         }
@@ -152,7 +190,7 @@ export function createEntityAdapter<
           const id = selectId(entity);
           const index = newArr.findIndex((item) => selectId(item) === id);
           if (index > -1) {
-            newArr[index] = { ...newArr[index], ...entity };
+            newArr[index] = { ...(newArr[index] as any), ...(entity as any) };
           } else {
             newArr.push(entity);
           }

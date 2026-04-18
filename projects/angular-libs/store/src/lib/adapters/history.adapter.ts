@@ -1,5 +1,5 @@
-import { computed, effect, Injector, signal, Signal, untracked } from '@angular/core';
-import { HistoryAdapter, HistoryAdapterOptions } from '../interfaces/history-adapter';
+import { computed, effect, Injector, signal, Signal, untracked, inject } from '@angular/core';
+import { HistoryAdapter, HistoryAdapterOptions } from '../interfaces/history.adapter';
 import { IALStore } from '../interfaces/ial-store';
 
 /**
@@ -21,25 +21,35 @@ import { IALStore } from '../interfaces/ial-store';
  *
  * @example
  * ```ts
- * const store = inject(MyFormStore); // implements IALStore
- * const history = createHistoryAdapter(store, 'formContent', { limit: 20 });
+ * interface AppState { doc: string; }
+ *
+ * const initialState: AppState = { doc: '' };
+ *
+ * @Injectable({ providedIn: 'root' })
+ * export class DocumentStore extends ALStore<AppState> {
+ *   // Create the history adapter, tracking the 'doc' state key
+ *   docHistory = createHistoryAdapter(this.storeRef, 'doc', { limit: 20 });
+ *
+ *   constructor() {
+ *     super(initialState); // Initialize state
+ *   }
+ *
+ *   updateDoc(newContent: string) {
+ *     this.update('doc', newContent); // History is tracked automatically
+ *   }
+ * }
  *
  * // Usage in component template:
- * // <button (click)="history.undo()" [disabled]="!history.canUndo()">Undo</button>
- * // <button (click)="history.redo()" [disabled]="!history.canRedo()">Redo</button>
+ * // <button (click)="store.docHistory.undo()" [disabled]="!store.docHistory.canUndo()">Undo</button>
+ * // <button (click)="store.docHistory.redo()" [disabled]="!store.docHistory.canRedo()">Redo</button>
  * ```
  */
 export function createHistoryAdapter<
   StoreState extends Record<string, any>,
   Key extends keyof StoreState,
   T = StoreState[Key],
->(
-  store: IALStore<StoreState>,
-  key: Key,
-  options?: HistoryAdapterOptions,
-  defaultInjector?: Injector,
-): HistoryAdapter<T> {
-  const injector = options?.injector || defaultInjector;
+>(store: IALStore<StoreState>, key: Key, options?: HistoryAdapterOptions): HistoryAdapter<T> {
+  const injector = options?.injector ?? inject(Injector);
   const limit = options?.limit ?? 50;
 
   const undoStack = signal<T[]>([]);

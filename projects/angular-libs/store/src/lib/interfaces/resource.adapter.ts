@@ -27,7 +27,7 @@ export interface ResourceAdapter<Req, Res> {
    * The reactive Signal directly linked to the store's state.
    * This is simply an alias for `store.getSignal(key)`, provided here for convenience.
    * This is the recommended way to read the data for rendering, as it includes
-   * initial state and automatically stays in sync across tabs.
+   * initial state and automatically stays in sync across tabs and the store itself.
    */
   value: Signal<Res>;
 

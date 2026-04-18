@@ -5,7 +5,7 @@ Reactive state management library powered by Angular Signals.
 **Features**
 
 - In-memory `ALStore` and persistent `ALStorage` (`localStorage` / `sessionStorage` / custom).
-- Extensible via highly typed adapters: `EntityAdapter` (for array/collections), `ResourceAdapter` (for async/HTTP integration), and `HistoryAdapter` (for undo/redo).
+- Extensible via highly typed adapters: `EntityAdapter` (for array/collections), `ResourceAdapter` (for async/HTTP integration), `RxResourceAdapter` (for RxJS streams), and `HistoryAdapter` (for undo/redo).
 - Automatic cross-tab sync (via `BroadcastChannel` or native `storage` events).
 
 ---
@@ -132,13 +132,15 @@ export class AppStateStore extends ALStore<AppState> {
 
 ### 3. Adapters
 
-The library provides powerful adapters that bind to a specific key in your store.
+The library provides powerful adapters that bind to a specific key in your store. Use `this.storeRef` to securely link the adapter back to the parent store.
 
 #### EntityAdapter
 
 Manage an array of entities natively with CRUD methods (`upsert`, `remove`, `update`, etc.).
 
 ```typescript
+import { ALStore, createEntityAdapter } from '@angular-libs/store';
+
 interface User {
   id: number;
   name: string;
@@ -156,7 +158,7 @@ const initialState: State = {
 @Injectable({ providedIn: 'root' })
 export class UserStore extends ALStore<State> {
   // Bind an EntityAdapter to the 'users' key
-  users = this.entityAdapter('users', { idField: 'id' });
+  users = createEntityAdapter(this.storeRef, 'users', { idField: 'id' });
 
   constructor() {
     super(initialState);
@@ -173,6 +175,8 @@ export class UserStore extends ALStore<State> {
 Seamlessly integrate Angular's asynchronous `resource` API directly into your state. This provides reactive fetching with automatic cancellation and robust loading states, while persisting the result in your chosen `ALStore` or `ALStorage`.
 
 ```typescript
+import { ALStore, createResourceAdapter } from '@angular-libs/store';
+
 interface User {
   id: number;
   name: string;
@@ -190,7 +194,7 @@ const initialState: State = {
 
 @Injectable({ providedIn: 'root' })
 export class ProfileStore extends ALStore<State> {
-  profileResource = this.resourceAdapter('profile', {
+  profileResource = createResourceAdapter(this.storeRef, 'profile', {
     // Reactively pass parameters to the loader
     params: () => ({ id: this.getSignal('selectedUserId')() }),
     loader: async ({ params, abortSignal }) => {
@@ -221,11 +225,49 @@ export class ProfileStore extends ALStore<State> {
 // store.set('selectedUserId', 2);
 ```
 
+#### RxResourceAdapter (RxJS Interop)
+
+Similar to `ResourceAdapter`, but designed specifically to work with Angular's `rxResource` and RxJS Observables. It automatically handles subscribing to your loaders and writing the result into the state.
+
+```typescript
+import { ALStore } from '@angular-libs/store';
+import { createRxResourceAdapter } from '@angular-libs/store/rxjs-interop';
+import { HttpClient } from '@angular/common/http';
+import { inject, Injectable } from '@angular/core';
+
+interface UserProfile {
+  status: string;
+}
+interface AppState {
+  userId: number;
+  userProfile: UserProfile | null;
+}
+
+const initialState: AppState = { userId: 1, userProfile: null };
+
+@Injectable({ providedIn: 'root' })
+export class AppStore extends ALStore<AppState> {
+  private http = inject(HttpClient);
+
+  // Syncs the HTTP observable automatically into the 'userProfile' key
+  rxProfileResource = createRxResourceAdapter(this.storeRef, 'userProfile', {
+    params: () => this.getSignal('userId')(),
+    loader: ({ params }) => this.http.get<UserProfile>(`/api/users/${params}`),
+  });
+
+  constructor() {
+    super(initialState);
+  }
+}
+```
+
 #### HistoryAdapter
 
 Time-travel capabilities with robust undo/redo stacks. It automatically tracks changes made to your state!
 
 ```typescript
+import { ALStore, createHistoryAdapter } from '@angular-libs/store';
+
 interface DocumentState {
   title: string;
   content: string;
@@ -244,7 +286,7 @@ const initialState: State = {
 @Injectable({ providedIn: 'root' })
 export class DocumentStore extends ALStore<State> {
   // Automatically tracks any changes made to 'document'
-  documentHistory = this.historyAdapter('document', { limit: 20 });
+  documentHistory = createHistoryAdapter(this.storeRef, 'document', { limit: 20 });
 
   constructor() {
     super(initialState);
@@ -289,11 +331,12 @@ export class DocumentStore extends ALStore<State> {
 - `clear()`: Clears all explicitly set state, reverting everything back to `initialState`.
 - `has(key)`: Checks if a key currently exists explicitly in the store.
 
-### Protected Adapter Methods
+### Adapters
 
-- `entityAdapter(key, options)`
-- `resourceAdapter(key, options)`
-- `historyAdapter(key, options)`
+- `createEntityAdapter(store, key, options)`
+- `createResourceAdapter(store, key, options)`
+- `createRxResourceAdapter(store, key, options)` (from `@angular-libs/store/rxjs-interop`)
+- `createHistoryAdapter(store, key, options)`
 
 ---
 
@@ -304,7 +347,8 @@ Want to generate your stores automatically? Copy the prompt below and paste it i
 <details>
 <summary><b>Click to view the AI Rules</b></summary>
 
-````markdown
+\`\`\`markdown
+
 # State Management AI Rules
 
 When creating or interacting with state management in this project, ALWAYS use `@angular-libs/store`.
@@ -315,9 +359,9 @@ Do NOT use NgRx, Akita, or plain BehaviorSubjects for stores.
 - **Base Class**: Extend `ALStore<AppState>` (in-memory) or `ALStorage<AppState>` (persistent).
 - **Setup**: Define an interface `AppState` and a strongly-typed `initialState` object. Call `super(initialState)` in the `@Injectable({ providedIn: 'root' })` class constructor.
 - **Adapters**:
-  - _Collections/Arrays_: `myEntities = this.entityAdapter('key', { idField: 'id' })`
-  - _Async Data/API HTTP_: `myRes = this.resourceAdapter('key', { params, loader })`
-  - _Time Travel_: `myHistory = this.historyAdapter('key')`
+  - _Collections/Arrays_: `myEntities = createEntityAdapter(this.storeRef, 'key', { idField: 'id' })`
+  - _Async Data/API HTTP_: `myRes = createResourceAdapter(this.storeRef, 'key', { params, loader })` (or `createRxResourceAdapter` for RxJS)
+  - _Time Travel_: `myHistory = createHistoryAdapter(this.storeRef, 'key', { limit: 10 })`
 
 ## 2. Consuming & Mutating in Components
 
@@ -330,7 +374,12 @@ Do NOT use NgRx, Akita, or plain BehaviorSubjects for stores.
 
 ```typescript
 import { Component, inject, Injectable } from '@angular/core';
-import { ALStore } from '@angular-libs/store';
+import {
+  ALStore,
+  createEntityAdapter,
+  createResourceAdapter,
+  createHistoryAdapter,
+} from '@angular-libs/store';
 
 // 1. Define State & Initial Values
 interface Todo {
@@ -348,7 +397,7 @@ const initialState: AppState = { todos: [], filter: 'all' };
 @Injectable({ providedIn: 'root' })
 export class TodoStore extends ALStore<AppState> {
   // Fetch reactively; automatically refetches when 'filter' signal changes
-  todoResource = this.resourceAdapter('todos', {
+  todoResource = createResourceAdapter(this.storeRef, 'todos', {
     params: () => ({ filter: this.getSignal('filter')() }),
     loader: async ({ params, abortSignal }) => {
       const res = await fetch(`/api/todos?filter=${params.filter}`, { signal: abortSignal });
@@ -357,9 +406,9 @@ export class TodoStore extends ALStore<AppState> {
   });
 
   // Bind adapters for collections to automatically get CRUD methods
-  todos = this.entityAdapter('todos', { idField: 'id' });
+  todos = createEntityAdapter(this.storeRef, 'todos', { idField: 'id' });
   // Instantly add Undo/Redo capabilities to the todos array!
-  todoHistory = this.historyAdapter('todos', { limit: 10 });
+  todoHistory = createHistoryAdapter(this.storeRef, 'todos', { limit: 10 });
 
   constructor() {
     super(initialState);
@@ -408,7 +457,8 @@ export class TodoComponent {
   filter = this.store.getSignal('filter'); // Signal<"all" | "pending">
 }
 ```
-````
+
+\`\`\`
 
 </details>
 

@@ -8,16 +8,9 @@ import {
   inject,
   makeEnvironmentProviders,
   EnvironmentProviders,
-  Injector,
 } from '@angular/core';
 import { ALStorageConfig } from './interfaces';
 import { IALStore } from './interfaces/ial-store';
-import { createEntityAdapter } from './adapters/entity-adapter';
-import { createResourceAdapter } from './adapters/resource-adapter';
-import { createHistoryAdapter } from './adapters/history-adapter';
-import { ResourceAdapter, ResourceAdapterOptions } from './interfaces/resource-adapter';
-import { HistoryAdapter, HistoryAdapterOptions } from './interfaces/history-adapter';
-import { EntityAdapter, EntityAdapterOptions } from './interfaces/entity-adapter';
 
 const DEFAULT_CONFIG: ALStorageConfig = {
   storageFactory: () => (typeof window !== 'undefined' ? window.localStorage : undefined),
@@ -75,16 +68,16 @@ export function provideSignalStorageConfig(config: Partial<ALStorageConfig>): En
  * @Injectable({ providedIn: 'root' })
  * export class AppStateStorage extends ALStorage<AppState> {
  *   // Array CRUD operations bound to 'users'
- *   usersAdapter = this.entityAdapter('users', { idField: 'id' });
+ *   usersAdapter = createEntityAdapter(this.storeRef, 'users', { idField: 'id' });
  *
  *   // Async data fetching bound to 'profile', refetching when 'selectedUserId' changes
- *   profileResource = this.resourceAdapter('profile', {
+ *   profileResource = createResourceAdapter(this.storeRef, 'profile', {
  *     params: () => ({ id: this.getSignal('selectedUserId')() }),
  *     loader: async ({ params, abortSignal }) => fetchProfile(params.id, abortSignal)
  *   });
  *
  *   // Undo/redo tracking bound to 'document'
- *   documentHistory = this.historyAdapter('document', { limit: 10 });
+ *   documentHistory = createHistoryAdapter(this.storeRef, 'document', { limit: 10 });
  *
  *   constructor() {
  *     super(initialState);
@@ -122,7 +115,6 @@ export abstract class ALStorage<T extends Record<string, any> = {}> implements I
   private storageEventListener?: (event: StorageEvent) => void;
   protected initialState: T;
   private destroyRef = inject(DestroyRef);
-  private injector = inject(Injector);
   private prefix = '';
 
   constructor(initialState?: T, configOverride?: Partial<ALStorageConfig>) {
@@ -259,96 +251,12 @@ export abstract class ALStorage<T extends Record<string, any> = {}> implements I
   }
 
   /**
-   * Creates an `EntityAdapter` to easily manage CRUD operations on an array property in the storage state.
-   * Automatically handles state immutability, ID-based lookups, synchronous array updates, and storage persistence.
-   *
-   * @typeParam K - The state property key. Must refer to an array property in the state.
-   * @typeParam Entity - The inferred generic type of the items in the array.
-   * @typeParam ID - The type of the unique identifier (usually `string` or `number`).
-   *
-   * @param key - The exact state property key to manage (e.g., `'users'`).
-   * @param options - Configuration for the adapter, such as the `idField` used to track uniqueness.
-   *
-   * @returns An `EntityAdapter` instance providing methods like `add`, `update`, `remove`, and `clear`.
-   *
-   * @example
-   * ```ts
-   * export class UserStore extends ALStore<{ users: User[] }> {
-   *   // Exposes this.users.add(user), this.users.remove(id), etc.
-   *   users = this.entityAdapter('users', { idField: 'id' });
-   * }
-   * ```
+   * Safe getter to expose the resolved `IALStore<T>` type upcast to adapters.
+   * Useful when composing adapters locally in the constructor or property initializers
+   * because TypeScript's deferred inference on `this` often produces fallback generic types.
    */
-  protected entityAdapter<
-    K extends keyof T,
-    Entity extends any = T[K] extends Array<infer U> ? U : any,
-    ID extends string | number = string | number,
-  >(key: K, options?: EntityAdapterOptions<NoInfer<Entity>, ID>): EntityAdapter<Entity, ID> {
-    return createEntityAdapter<T, K, Entity, ID>(this, key, options as any);
-  }
-
-  /**
-   * Binds an async Angular `resource` to a specific state property in the storage.
-   * Automatically fetches data and patches the exact key in your local/session storage upon resolution,
-   * syncing it across tabs instantly via Storage Events.
-   *
-   * @typeParam K - The state property key that the resource will populate with data.
-   * @typeParam Req - The inferred or explicit request type used to fetch the data.
-   * @typeParam Res - The inferred or explicit response data type expected from the loader.
-   *
-   * @param key - The specific state property key to manage (e.g., `'profile'`).
-   * @param options - Configuration for the resource, including `params` arguments and the async `loader`.
-   *
-   * @returns A `ResourceAdapter` wrapping an Angular Resource, providing `isLoading()`, `reload()`, etc.
-   *
-   * @example
-   * ```ts
-   * export class ProfileStorage extends ALStorage<{ profile: UserProfile | null, selectedUserId: number }> {
-   *   profileResource = this.resourceAdapter('profile', {
-   *     // Reactively pass parameters to the loader
-   *     params: () => ({ id: this.getSignal('selectedUserId')() }),
-   *     loader: async ({ params, abortSignal }) => {
-   *       const res = await fetch(`/api/users/${params.id}`, { signal: abortSignal });
-   *       return res.json();
-   *     }
-   *   });
-   * }
-   * ```
-   */
-  protected resourceAdapter<K extends keyof T, Req = any, Res extends any = T[K]>(
-    key: K,
-    options: ResourceAdapterOptions<Req, NoInfer<Res>>,
-  ): ResourceAdapter<Req, Res> {
-    return createResourceAdapter<T, K, Req, Res>(this, key, options, this.injector);
-  }
-
-  /**
-   * Binds an undo/redo timeline to a specific state property in the storage.
-   * Automatically tracks structural changes up to a capped history limit for time-travel debugging
-   * while pushing state to storage along the way.
-   *
-   * @typeParam K - The specific key in the storage's state being tracked.
-   * @typeParam Entity - The inferred type of the value at the specific key.
-   *
-   * @param key - The specific state property key to bind history to (e.g., `'formContent'`).
-   * @param options - Configure history options, such as the maximum undo states `limit`.
-   *
-   * @returns A `HistoryAdapter` providing `undo()`, `redo()`, `canUndo()`, and `canRedo()`.
-   *
-   * @example
-   * ```ts
-   * export class EditorStorage extends ALStorage<{ document: string }> {
-   *   documentHistory = this.historyAdapter('document', { limit: 20 });
-   *
-   *   undo() { this.documentHistory.undo(); }
-   * }
-   * ```
-   */
-  protected historyAdapter<K extends keyof T, Entity extends any = T[K]>(
-    key: K,
-    options?: HistoryAdapterOptions,
-  ): HistoryAdapter<Entity> {
-    return createHistoryAdapter<T, K, Entity>(this, key, options, this.injector);
+  protected get storeRef(): IALStore<T> {
+    return this;
   }
 
   clear(): void {
