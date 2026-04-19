@@ -335,9 +335,7 @@ export class DocumentStore extends ALStore<State> {
 - `set(key, value)`: Sets typed data and broadcasts changes to any observing signals (and other tabs if configured).
 - `update(key, updateFn)`: Safely updates a value based on its previous state using a callback.
 - `patchState(stateOrUpdater)`: Safely updates multiple properties in the state object at once (accepts an object or an updater function).
-- `remove(key)`: Removes an item completely, reverting local reactive signals to their `initialState`.
-- `clear()`: Clears all explicitly set state, reverting everything back to `initialState`.
-- `has(key)`: Checks if a key currently exists explicitly in the store.
+- `reset(key?)`: Resets a specific key (or the entire store if omitted) back to its `initialState`.
 
 ### Adapters
 

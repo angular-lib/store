@@ -37,7 +37,7 @@ export function provideSignalStorageConfig(config: Partial<ALStorageConfig>): En
  * - **Adapters**: Utilize `this.entityAdapter()` for CRUD array operations, `this.resourceAdapter()` to bridge with async HTTP requests seamlessly, or `this.historyAdapter()` for instant undo/redo capabilities.
  * - **Synchronous Access**: Allows imperative read/write operations (`get`, `set`, `update`) for non-reactive contexts.
  * - **Cross-Tab Sync**: Automatically synchronizes state changes across browser windows/tabs using the native `storage` event.
- * - **Initial State Management**: Preserves default values, allowing safe fallback when state items are removed or the store is cleared.
+ * - **Initial State Management**: Preserves default values, allowing safe fallback when state items are reset.
  *
  * Define a strict type for the storage keys and values using the generic parameter `T`.
  * You can configure the storage mechanism using the `provideSignalStorageConfig` provider function,
@@ -207,7 +207,7 @@ export abstract class ALStorage<T extends Record<string, any> = {}> implements I
     if (!this.storage) return;
 
     if (value === undefined) {
-      return this.remove(key);
+      return this.reset(key);
     }
 
     const valueString = JSON.stringify(value);
@@ -257,22 +257,43 @@ export abstract class ALStorage<T extends Record<string, any> = {}> implements I
 
     for (const [key, value] of Object.entries(partialState)) {
       if (value === undefined) {
-        this.remove(key as keyof T);
+        this.reset(key as keyof T);
       } else {
         this.set(key as keyof T, value as any);
       }
     }
   }
 
-  remove<K extends keyof T>(key: K): void {
+  reset<K extends keyof T>(key?: K): void {
     if (!this.storage) return;
 
-    this.storage.removeItem(this.getPrefixedKey(key));
-    this.updateSignalWithInitialState(key);
-  }
+    if (key !== undefined) {
+      this.storage.removeItem(this.getPrefixedKey(key));
+      this.updateSignalWithInitialState(key);
+    } else {
+      if (this.prefix) {
+        // With a prefix, we can safely wipe out all matching keys from storage.
+        // This ensures we don't leave dangling data if the `T` schema changes over time.
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < this.storage.length; i++) {
+          const k = this.storage.key(i);
+          if (k && k.startsWith(this.prefix)) {
+            keysToRemove.push(k);
+          }
+        }
+        keysToRemove.forEach((k) => this.storage!.removeItem(k));
+      } else {
+        // Without a prefix, wiping everything could destroy data belonging to other apps on the domain.
+        // For safety, tightly restrict removal to the schema keys we definitely know about.
+        for (const k of this.getManagedKeys()) {
+          this.storage.removeItem(this.getPrefixedKey(k));
+        }
+      }
 
-  has<K extends keyof T>(key: K): boolean {
-    return this.storage?.getItem(this.getPrefixedKey(key)) != null;
+      for (const k of this.signals.keys()) {
+        this.updateSignalWithInitialState(k);
+      }
+    }
   }
 
   /**
@@ -282,33 +303,6 @@ export abstract class ALStorage<T extends Record<string, any> = {}> implements I
    */
   protected get storeRef(): IALStore<T> {
     return this;
-  }
-
-  clear(): void {
-    if (!this.storage) return;
-
-    if (this.prefix) {
-      // With a prefix, we can safely wipe out all matching keys from storage.
-      // This ensures we don't leave dangling data if the `T` schema changes over time.
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < this.storage.length; i++) {
-        const key = this.storage.key(i);
-        if (key && key.startsWith(this.prefix)) {
-          keysToRemove.push(key);
-        }
-      }
-      keysToRemove.forEach((k) => this.storage!.removeItem(k));
-    } else {
-      // Without a prefix, blindly clearing could destroy data belonging to other apps on the domain.
-      // For safety, tightly restrict removal to the schema keys we definitely know about.
-      for (const key of this.getManagedKeys()) {
-        this.storage.removeItem(this.getPrefixedKey(key));
-      }
-    }
-
-    for (const key of this.signals.keys()) {
-      this.updateSignalWithInitialState(key);
-    }
   }
 
   private updateSignal(key: keyof T, value: any): void {

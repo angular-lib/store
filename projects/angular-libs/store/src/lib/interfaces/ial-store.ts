@@ -68,26 +68,9 @@ export interface IALStore<T extends Record<string, any>> {
   patchState(stateOrUpdater: Partial<T> | ((state: T) => Partial<T>)): void;
 
   /**
-   * Removes an item from the store, reverting it to its `initialState`.
-   * Useful for resetting specific chunks of state back to defaults.
+   * Resets a specific state key or the entire store explicitly back to its `initialState` value.
    *
-   * @param key The state key to remove entirely.
+   * @param key Optional state key to reset. If omitted, the entire store is reset.
    */
-  remove<K extends keyof T>(key: K): void;
-
-  /**
-   * Check if a key currently exists explicitly in the store.
-   * This checks actual modified state, not initial defaults.
-   *
-   * @param key The key to inspect.
-   * @returns `true` if modified explicitly and tracking in state, otherwise `false`.
-   */
-  has<K extends keyof T>(key: K): boolean;
-
-  /**
-   * Clears all explicitly set state, reverting everything back to `initialState`.
-   * Good for logout or general application resets across tabs.
-   * Modifies signals for every tracked key.
-   */
-  clear(): void;
+  reset<K extends keyof T>(key?: K): void;
 }

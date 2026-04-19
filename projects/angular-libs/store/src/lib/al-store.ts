@@ -13,7 +13,7 @@ import { IALStore } from './interfaces/ial-store';
  * - **Adapters**: Utilize `createEntityAdapter()` for CRUD array operations, `createResourceAdapter()` to bridge with async HTTP requests seamlessly, or `createHistoryAdapter()` for instant undo/redo capabilities.
  * - **Synchronous Access**: Allows imperative read/write operations (`get`, `set`, `update`) for non-reactive contexts.
  * - **Cross-Tab Sync**: Automatically synchronizes state changes across browser windows/tabs when a `syncChannel` is provided.
- * - **Initial State Management**: Preserves default values, allowing safe fallback when state items are removed or the store is cleared.
+ * - **Initial State Management**: Preserves default values, allowing safe fallback when state items are reset.
  *
  * @example
  * ```ts
@@ -105,13 +105,8 @@ export abstract class ALStore<T extends Record<string, any> = {}> implements IAL
               this.internalSet(data.key, data.value as any);
             }
             break;
-          case 'remove':
-            if (data.key !== undefined) {
-              this.internalRemove(data.key);
-            }
-            break;
-          case 'clear':
-            this.internalClear();
+          case 'reset':
+            this.internalReset(data.key);
             break;
           case 'patchState':
             if (data.partialState) {
@@ -136,7 +131,7 @@ export abstract class ALStore<T extends Record<string, any> = {}> implements IAL
 
   set<K extends keyof T>(key: K, value: T[K]): void {
     if (value === undefined) {
-      return this.remove(key);
+      return this.reset(key);
     }
     this.internalSet(key, value);
     this.channel?.postMessage({ action: 'set', key, value });
@@ -168,30 +163,16 @@ export abstract class ALStore<T extends Record<string, any> = {}> implements IAL
   private internalPatchState(partialState: Partial<T>): void {
     for (const [key, value] of Object.entries(partialState)) {
       if (value === undefined) {
-        this.internalRemove(key as keyof T);
+        this.internalReset(key as keyof T);
       } else {
         this.internalSet(key as keyof T, value as any);
       }
     }
   }
 
-  remove<K extends keyof T>(key: K): void {
-    this.internalRemove(key);
-    this.channel?.postMessage({ action: 'remove', key });
-  }
-
-  private internalRemove<K extends keyof T>(key: K): void {
-    delete this.state[key];
-    this.updateSignalWithInitialState(key);
-  }
-
-  has<K extends keyof T>(key: K): boolean {
-    return key in this.state;
-  }
-
-  clear(): void {
-    this.internalClear();
-    this.channel?.postMessage({ action: 'clear' });
+  reset<K extends keyof T>(key?: K): void {
+    this.internalReset(key);
+    this.channel?.postMessage({ action: 'reset', key });
   }
 
   /**
@@ -203,10 +184,15 @@ export abstract class ALStore<T extends Record<string, any> = {}> implements IAL
     return this;
   }
 
-  private internalClear(): void {
-    this.state = {};
-    for (const key of this.signals.keys()) {
+  private internalReset<K extends keyof T>(key?: K): void {
+    if (key !== undefined) {
+      delete this.state[key];
       this.updateSignalWithInitialState(key);
+    } else {
+      this.state = {};
+      for (const k of this.signals.keys()) {
+        this.updateSignalWithInitialState(k);
+      }
     }
   }
 
