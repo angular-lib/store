@@ -68,6 +68,19 @@ export interface IALStore<T extends Record<string, any>> {
   patchState(stateOrUpdater: Partial<T> | ((state: T) => Partial<T>)): void;
 
   /**
+   * Creates a derived reactive Signal (selector) using a projector function.
+   * The `state` object passed to the projector is a reactive proxy; accessing its properties
+   * automatically registers them as dependencies for the derived Signal.
+   *
+   * @param projector A pure function that computes a derived value from the state.
+   * @returns A computed Signal containing the derived value.
+   *
+   * @example
+   * activeUsers = store.select(state => state.users.filter(u => u.isActive));
+   */
+  select<R>(projector: (state: T) => R): Signal<R>;
+
+  /**
    * Resets a specific state key or the entire store explicitly back to its `initialState` value.
    *
    * @param key Optional state key to reset. If omitted, the entire store is reset.

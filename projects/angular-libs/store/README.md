@@ -130,7 +130,26 @@ export class AppStateStore extends ALStore<AppState> {
 
 ---
 
-### 3. Adapters
+### 3. Derived State (Selectors)
+
+You can compute derived state elegantly using the `.select()` method. It takes a projector function and wraps your standard state naturally so you don't have to manually execute Signals (`.getSignal(key)()`). Property access inside the `.select()` callback is automatically registered as a reactive dependency!
+
+```typescript
+@Injectable({ providedIn: 'root' })
+export class AppStore extends ALStore<AppState> {
+  // Pure, deeply typed, reactive 🚀
+  activeUsers = this.select((state) => {
+    return state.users.filter((u) => (state.filter === 'active' ? u.isActive : true));
+  });
+
+  // Compose multiple selectors naturally!
+  firstActiveUser = this.select(() => this.activeUsers()[0]);
+}
+```
+
+---
+
+### 4. Adapters
 
 The library provides powerful adapters that bind to a specific key in your store. Use `this.storeRef` to securely link the adapter back to the parent store.
 
@@ -330,6 +349,7 @@ export class DocumentStore extends ALStore<State> {
 
 - `IALStore<T>` (Implemented by both `ALStore` and `ALStorage`)
 
+- `select(projector)`: Computes derived state elegantly using a reactive proxy over your state object.
 - `getSignal(key)`: Retrieves a reactive readonly Angular `Signal` for a specific key.
 - `get(key)`: Retrieves data statically from the store without creating a reactive dependency.
 - `set(key, value)`: Sets typed data and broadcasts changes to any observing signals (and other tabs if configured).
@@ -371,7 +391,8 @@ Do NOT use NgRx, Akita, or plain BehaviorSubjects for stores.
 
 ## 2. Consuming & Mutating in Components
 
-- Access state natively as Signals: `myVal = this.store.getSignal('key')`.
+- Access primitive state natively as Signals: `myVal = this.store.getSignal('key')`.
+- Access derived state (selectors): `activeTodos = this.store.select(state => state.todos.filter(t => t.done))`.
 - For adapters, use their properties directly: `this.store.myEntities.items()` or `this.store.myRes.isLoading()`.
 - **Mutations**: Call `this.store.set('key', value)`, `this.store.update('key', fn)`, or `this.store.patchState({ ... })` / `this.store.patchState(state => ...)` directly from components for simple state changes. Only write custom methods in the store for complex/multi-key logic.
 - **Constraint**: DO NOT use RxJS observables or `.subscribe()` for state consumption; rely exclusively on Angular Signals.
@@ -416,6 +437,9 @@ export class TodoStore extends ALStore<AppState> {
   todos = createEntityAdapter(this.storeRef, 'todos', { idField: 'id' });
   // Instantly add Undo/Redo capabilities to the todos array!
   todoHistory = createHistoryAdapter(this.storeRef, 'todos', { limit: 10 });
+
+  // Pure, reactive derived state using Proxy access
+  pendingCount = this.select((state) => state.todos.filter((t) => !t.done).length);
 
   constructor() {
     super(initialState);

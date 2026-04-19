@@ -8,6 +8,7 @@ import {
   inject,
   makeEnvironmentProviders,
   EnvironmentProviders,
+  computed,
 } from '@angular/core';
 import { ALStorageConfig } from './interfaces';
 import { IALStore } from './interfaces/ial-store';
@@ -201,6 +202,15 @@ export abstract class ALStorage<T extends Record<string, any> = {}> implements I
       this.signals.set(key, signal(stateValue));
     }
     return this.signals.get(key)!.asReadonly();
+  }
+
+  select<R>(projector: (state: T) => R): Signal<R> {
+    const stateProxy = new Proxy({} as T, {
+      get: (_, prop: string | symbol) => {
+        return this.getSignal(prop as keyof T)();
+      },
+    });
+    return computed(() => projector(stateProxy));
   }
 
   set<K extends keyof T>(key: K, value: T[K]): void {
