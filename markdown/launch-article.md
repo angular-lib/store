@@ -91,6 +91,10 @@ export class AppStore extends ALStore<AppState> {
 
   // Utilize the entity adapter's built-in methods
   addTodo(title: string) {
+    // We can also patch the state directly, a familiar pattern:
+    // this.patchState({ currentUserId: 99 });
+    // this.patchState(state => ({ currentUserId: state.currentUserId + 1 }));
+
     this.todos.upsertOne({
       id: crypto.randomUUID(),
       title,

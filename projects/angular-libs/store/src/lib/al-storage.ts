@@ -239,6 +239,31 @@ export abstract class ALStorage<T extends Record<string, any> = {}> implements I
     this.set(key, newValue);
   }
 
+  private getSnapshot(): T {
+    const snapshot = { ...this.initialState };
+    for (const key in snapshot) {
+      if (Object.prototype.hasOwnProperty.call(snapshot, key)) {
+        snapshot[key] = this.get(key);
+      }
+    }
+    return snapshot;
+  }
+
+  patchState(stateOrUpdater: Partial<T> | ((state: T) => Partial<T>)): void {
+    if (!this.storage) return;
+
+    const partialState =
+      typeof stateOrUpdater === 'function' ? stateOrUpdater(this.getSnapshot()) : stateOrUpdater;
+
+    for (const [key, value] of Object.entries(partialState)) {
+      if (value === undefined) {
+        this.remove(key as keyof T);
+      } else {
+        this.set(key as keyof T, value as any);
+      }
+    }
+  }
+
   remove<K extends keyof T>(key: K): void {
     if (!this.storage) return;
 

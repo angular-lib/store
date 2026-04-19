@@ -148,11 +148,13 @@ interface User {
 interface State {
   users: User[];
   isActive: boolean;
+  lastSync: number | null;
 }
 
 const initialState: State = {
   users: [],
   isActive: false,
+  lastSync: null,
 };
 
 @Injectable({ providedIn: 'root' })
@@ -166,8 +168,13 @@ export class UserStore extends ALStore<State> {
 }
 
 // In component:
+// Use adapter for entity operations:
 // store.users.upsert({ id: 1, name: 'John' });
 // store.users.remove(1);
+//
+// Use patchState to modify multiple root properties at once:
+// store.patchState({ isActive: true, lastSync: Date.now() });
+// store.patchState((state) => ({ lastSync: state.lastSync + 1 }));
 ```
 
 #### ResourceAdapter
@@ -327,6 +334,7 @@ export class DocumentStore extends ALStore<State> {
 - `get(key)`: Retrieves data statically from the store without creating a reactive dependency.
 - `set(key, value)`: Sets typed data and broadcasts changes to any observing signals (and other tabs if configured).
 - `update(key, updateFn)`: Safely updates a value based on its previous state using a callback.
+- `patchState(stateOrUpdater)`: Safely updates multiple properties in the state object at once (accepts an object or an updater function).
 - `remove(key)`: Removes an item completely, reverting local reactive signals to their `initialState`.
 - `clear()`: Clears all explicitly set state, reverting everything back to `initialState`.
 - `has(key)`: Checks if a key currently exists explicitly in the store.
@@ -367,8 +375,9 @@ Do NOT use NgRx, Akita, or plain BehaviorSubjects for stores.
 
 - Access state natively as Signals: `myVal = this.store.getSignal('key')`.
 - For adapters, use their properties directly: `this.store.myEntities.items()` or `this.store.myRes.isLoading()`.
-- **Mutations**: Call `this.store.set('key', value)` or `this.store.update('key', fn)` directly from components for simple state changes. Only write custom methods in the store for complex/multi-key logic.
+- **Mutations**: Call `this.store.set('key', value)`, `this.store.update('key', fn)`, or `this.store.patchState({ ... })` / `this.store.patchState(state => ...)` directly from components for simple state changes. Only write custom methods in the store for complex/multi-key logic.
 - **Constraint**: DO NOT use RxJS observables or `.subscribe()` for state consumption; rely exclusively on Angular Signals.
+- **Immutability Requirement**: Angular Signals rely on `Object.is` for equality. When updating objects or arrays, you **must return a new reference** (e.g., using spread syntax `{ ...state, key: val }` or Array `.map()`). Direct mutations like `array.push(1)` or `user.name = 'John'` will NOT trigger template updates.
 
 ## 3. Reference Example
 

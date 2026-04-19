@@ -113,6 +113,11 @@ export abstract class ALStore<T extends Record<string, any> = {}> implements IAL
           case 'clear':
             this.internalClear();
             break;
+          case 'patchState':
+            if (data.partialState) {
+              this.internalPatchState(data.partialState);
+            }
+            break;
         }
       };
     }
@@ -146,6 +151,28 @@ export abstract class ALStore<T extends Record<string, any> = {}> implements IAL
     const currentValue = this.get(key);
     const newValue = updateFn(currentValue);
     this.set(key, newValue);
+  }
+
+  private getSnapshot(): T {
+    return { ...this.initialState, ...this.state } as T;
+  }
+
+  patchState(stateOrUpdater: Partial<T> | ((state: T) => Partial<T>)): void {
+    const partialState =
+      typeof stateOrUpdater === 'function' ? stateOrUpdater(this.getSnapshot()) : stateOrUpdater;
+
+    this.internalPatchState(partialState);
+    this.channel?.postMessage({ action: 'patchState', partialState });
+  }
+
+  private internalPatchState(partialState: Partial<T>): void {
+    for (const [key, value] of Object.entries(partialState)) {
+      if (value === undefined) {
+        this.internalRemove(key as keyof T);
+      } else {
+        this.internalSet(key as keyof T, value as any);
+      }
+    }
   }
 
   remove<K extends keyof T>(key: K): void {
