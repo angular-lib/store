@@ -352,6 +352,7 @@ export class DocumentStore extends ALStore<State> {
 - `select(projector)`: Computes derived state elegantly using a reactive proxy over your state object.
 - `getSignal(key)`: Retrieves a reactive readonly Angular `Signal` for a specific key.
 - `get(key)`: Retrieves data statically from the store without creating a reactive dependency.
+- `snapshot()`: Retrieves a synchronous snapshot of the entire current state object. Useful for logging or hydration.
 - `set(key, value)`: Sets typed data and broadcasts changes to any observing signals (and other tabs if configured).
 - `update(key, updateFn)`: Safely updates a value based on its previous state using a callback.
 - `patchState(stateOrUpdater)`: Safely updates multiple properties in the state object at once (accepts an object or an updater function).

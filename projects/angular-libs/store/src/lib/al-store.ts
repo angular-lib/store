@@ -165,13 +165,13 @@ export abstract class ALStore<T extends Record<string, any> = {}> implements IAL
     this.set(key, newValue);
   }
 
-  private getSnapshot(): T {
+  snapshot(): T {
     return { ...this.initialState, ...this.state } as T;
   }
 
   patchState(stateOrUpdater: Partial<T> | ((state: T) => Partial<T>)): void {
     const partialState =
-      typeof stateOrUpdater === 'function' ? stateOrUpdater(this.getSnapshot()) : stateOrUpdater;
+      typeof stateOrUpdater === 'function' ? stateOrUpdater(this.snapshot()) : stateOrUpdater;
 
     this.internalPatchState(partialState);
     this.channel?.postMessage({ action: 'patchState', partialState });

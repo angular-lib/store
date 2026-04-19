@@ -86,4 +86,12 @@ export interface IALStore<T extends Record<string, any>> {
    * @param key Optional state key to reset. If omitted, the entire store is reset.
    */
   reset<K extends keyof T>(key?: K): void;
+
+  /**
+   * Retrieves a synchronous snapshot of the entire current state object.
+   * Useful for logging, hydration, or imperative reads where Signals are not needed.
+   *
+   * @returns A shallow copy of the complete current state.
+   */
+  snapshot(): T;
 }
