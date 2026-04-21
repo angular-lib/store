@@ -2,370 +2,90 @@ Reactive state management library powered by Angular Signals.
 
 [Stackblitz demo](https://stackblitz.com/edit/angular-libs-store?file=src%2Fmain.ts,src%2Fmain.html)
 
-**Features**
+## Features
 
-- In-memory `ALStore` and persistent `ALStorage` (`localStorage` / `sessionStorage` / custom).
-- Extensible via highly typed adapters: `EntityAdapter` (for array/collections), `ResourceAdapter` (for async/HTTP integration), `RxResourceAdapter` (for RxJS streams), and `HistoryAdapter` (for undo/redo).
-- Automatic cross-tab sync (via `BroadcastChannel` or native `storage` events).
+- **Store & Storage**: In-memory `ALStore` and persistent `ALStorage` (`localStorage`/`sessionStorage`/custom).
+- **Cross-Tab Sync**: Out-of-the-box state synchronization across tabs via `BroadcastChannel` or native `storage` events.
+- **Adapters**:
+  - `EntityAdapter`: Native CRUD for collections.
+  - `ResourceAdapter` / `RxResourceAdapter`: Async/HTTP state tracking.
+  - `HistoryAdapter`: Undo/redo time-travel.
+- **Derived State**: Compute derived state easily with `.select()`.
 
----
-
-## Usage
-
-### 1. `ALStore` service
-
-`ALStore` is a purely in-memory reactive store (similar to NgRx SignalStore) with built-in cross-tab sync capabilities (via `BroadcastChannel`).
+## Quick Start
 
 ```typescript
 import { Component, inject, Injectable } from '@angular/core';
-import { ALStore } from '@angular-libs/store';
-
-interface AppState {
-  theme: 'light' | 'dark';
-}
-
-const initialState: AppState = {
-  theme: 'light',
-};
-
-@Injectable({ providedIn: 'root' })
-export class AppStateStore extends ALStore<AppState> {
-  constructor() {
-    // Second argument enables cross-tab synchronization
-    super(initialState, { syncChannel: 'app_store_sync' });
-  }
-
-  toggle() {
-    this.update('theme', (t) => (t === 'light' ? 'dark' : 'light'));
-  }
-}
-
-@Component({
-  standalone: true,
-  template: `<button (click)="store.toggle()">{{ theme() }}</button>`,
-})
-export class AppComponent {
-  store = inject(AppStateStore);
-  theme = this.store.getSignal('theme');
-}
-```
-
----
-
-### 2. `ALStorage` service
-
-`ALStorage` is perfect for lightweight, synchronous key-value storage. It supports native cross-tab sync via the browser's `storage` event.
-
-Supports:
-
-- `localStorage` (default)
-- `sessionStorage`
-- Custom storage mechanisms
-
-```typescript
-import { Component, inject, Injectable } from '@angular/core';
-import { ALStorage } from '@angular-libs/store';
-
-interface AppState {
-  theme: 'light' | 'dark';
-}
-
-const initialState: AppState = {
-  theme: 'light',
-};
-
-@Injectable({ providedIn: 'root' })
-export class AppStateStorage extends ALStorage<AppState> {
-  constructor() {
-    super(initialState);
-  }
-}
-
-@Component({
-  standalone: true,
-  template: `<button (click)="toggle()">{{ theme() }}</button>`,
-})
-export class AppComponent {
-  private storage = inject(AppStateStorage);
-  theme = this.storage.getSignal('theme');
-
-  toggle() {
-    this.storage.update('theme', (t) => (t === 'light' ? 'dark' : 'light'));
-  }
-}
-```
-
-#### Changing the Sync Storage Provider
-
-You can switch to `sessionStorage` or a custom storage mechanism via providers:
-
-```typescript
-import { provideSignalStorageConfig } from '@angular-libs/store';
-
-// In app.config.ts
-providers: [
-  // Use sessionStorage instead of localStorage:
-  provideSignalStorageConfig({ storageFactory: () => window.sessionStorage }),
-];
-```
-
-### 🌟 Built-in Cross-Tab Synchronization
-
-Unlike typical Angular state management tools (like NgRx) that require third-party plugins or custom meta-reducers for multi-window support, this library provides **out-of-the-box cross-tab synchronization**.
-
-- **`ALStore`**: Leverages the native `BroadcastChannel` API. If a user updates the state in Tab A, Tab B instantly receives the update and its Signals react naturally.
-- **`ALStorage`**: Leverages native browser `storage` events to sync `localStorage` changes cleanly across windows.
-
-```typescript
-@Injectable({ providedIn: 'root' })
-export class AppStateStore extends ALStore<AppState> {
-  constructor() {
-    // Simply provide a syncing channel name, and the state is shared across all open tabs!
-    super(initialState, { syncChannel: 'my_app_shared_channel' });
-  }
-}
-```
-
-> **Note:** To use Cross-Tab Sync, ensure your state consists of serializable data (Objects, Arrays, Primitives). Functions or complex class instances cannot be synchronized across tabs via the native structured clone algorithm or JSON stringification.
-
----
-
-### 3. Derived State (Selectors)
-
-You can compute derived state elegantly using the `.select()` method. It takes a projector function and wraps your standard state naturally so you don't have to manually execute Signals (`.getSignal(key)()`). Property access inside the `.select()` callback is automatically registered as a reactive dependency!
-
-```typescript
-@Injectable({ providedIn: 'root' })
-export class AppStore extends ALStore<AppState> {
-  // Pure, deeply typed, reactive 🚀
-  activeUsers = this.select((state) => {
-    return state.users.filter((u) => (state.filter === 'active' ? u.isActive : true));
-  });
-
-  // Compose multiple selectors naturally!
-  firstActiveUser = this.select(() => this.activeUsers()[0]);
-}
-```
-
----
-
-### 4. Adapters
-
-The library provides powerful adapters that bind to a specific key in your store. Use `this.storeRef` to securely link the adapter back to the parent store.
-
-#### EntityAdapter
-
-Manage an array of entities natively with CRUD methods (`upsert`, `remove`, `update`, etc.).
-
-```typescript
 import { ALStore, createEntityAdapter } from '@angular-libs/store';
 
 interface User {
   id: number;
   name: string;
-}
-interface State {
-  users: User[];
   isActive: boolean;
-  lastSync: number | null;
 }
 
-const initialState: State = {
-  users: [],
-  isActive: false,
-  lastSync: null,
-};
+interface AppState {
+  users: User[];
+  filter: 'all' | 'active';
+}
+
+const initialState: AppState = { users: [], filter: 'all' };
 
 @Injectable({ providedIn: 'root' })
-export class UserStore extends ALStore<State> {
-  // Bind an EntityAdapter to the 'users' key
+export class UserStore extends ALStore<AppState> {
+  // Bind an EntityAdapter for CRUD array operations
   users = createEntityAdapter(this.storeRef, 'users', { idField: 'id' });
 
+  // Computed derived state
+  filteredUsers = this.select((state) =>
+    state.filter === 'active' ? state.users.filter((u) => u.isActive) : state.users,
+  );
+
   constructor() {
-    super(initialState);
+    // Pass { syncChannel: '...' } to enable cross-tab sync!
+    super(initialState, { syncChannel: 'user_store_sync' });
   }
 }
 
-// In component:
-// Use adapter for entity operations:
-// store.users.upsert({ id: 1, name: 'John' });
-// store.users.remove(1);
-//
-// Use patchState to modify multiple root properties at once:
-// store.patchState({ isActive: true, lastSync: Date.now() });
-// store.patchState((state) => ({ lastSync: state.lastSync + 1 }));
-```
+@Component({
+  standalone: true,
+  template: `
+    <button (click)="store.set('filter', 'all')">Show All</button>
+    <button (click)="store.set('filter', 'active')">Show Active</button>
+    <button (click)="store.users.upsertOne({ id: Date.now(), name: 'Alice', isActive: true })">
+      Add Active User
+    </button>
 
-#### ResourceAdapter
-
-Seamlessly integrate Angular's asynchronous `resource` API directly into your state. This provides reactive fetching with automatic cancellation and robust loading states, while persisting the result in your chosen `ALStore` or `ALStorage`.
-
-```typescript
-import { ALStore, createResourceAdapter } from '@angular-libs/store';
-
-interface User {
-  id: number;
-  name: string;
-}
-
-interface State {
-  profile: User | null;
-  selectedUserId: number;
-}
-
-const initialState: State = {
-  profile: null,
-  selectedUserId: 1,
-};
-
-@Injectable({ providedIn: 'root' })
-export class ProfileStore extends ALStore<State> {
-  profileResource = createResourceAdapter(this.storeRef, 'profile', {
-    // Reactively pass parameters to the loader
-    params: () => ({ id: this.getSignal('selectedUserId')() }),
-    loader: async ({ params, abortSignal }) => {
-      const res = await fetch(`/api/users/${params.id}`, { signal: abortSignal });
-      return res.json();
-    },
-  });
-
-  constructor() {
-    super(initialState);
-  }
-}
-
-// In template or component:
-// const store = inject(ProfileStore);
-//
-// @if (store.profileResource.isLoading()) {
-//   <p>Loading...</p>
-// } @else {
-//   <!-- Use .value() directly from the resource: -->
-//   <p>{{ store.profileResource.value()?.name }}</p>
-//
-//   <!-- Or use the store's native signal (they are the exact same): -->
-//   <p>{{ store.getSignal('profile')()?.name }}</p>
-// }
-//
-// // Change the ID to automatically abort the previous fetch and load the new user!
-// store.set('selectedUserId', 2);
-```
-
-#### RxResourceAdapter (RxJS Interop)
-
-Similar to `ResourceAdapter`, but designed specifically to work with Angular's `rxResource` and RxJS Observables. It automatically handles subscribing to your loaders and writing the result into the state.
-
-```typescript
-import { ALStore } from '@angular-libs/store';
-import { createRxResourceAdapter } from '@angular-libs/store/rxjs-interop';
-import { HttpClient } from '@angular/common/http';
-import { inject, Injectable } from '@angular/core';
-
-interface UserProfile {
-  status: string;
-}
-interface AppState {
-  userId: number;
-  userProfile: UserProfile | null;
-}
-
-const initialState: AppState = { userId: 1, userProfile: null };
-
-@Injectable({ providedIn: 'root' })
-export class AppStore extends ALStore<AppState> {
-  private http = inject(HttpClient);
-
-  // Syncs the HTTP observable automatically into the 'userProfile' key
-  rxProfileResource = createRxResourceAdapter(this.storeRef, 'userProfile', {
-    params: () => this.getSignal('userId')(),
-    loader: ({ params }) => this.http.get<UserProfile>(`/api/users/${params}`),
-  });
-
-  constructor() {
-    super(initialState);
-  }
+    <!-- Iterate over the reactive derived state: -->
+    @for (user of store.filteredUsers(); track user.id) {
+      <div>{{ user.name }} ({{ user.isActive ? 'Active' : 'Inactive' }})</div>
+    }
+  `,
+})
+export class AppComponent {
+  store = inject(UserStore);
 }
 ```
 
-#### HistoryAdapter
+## API Overview
 
-Time-travel capabilities with robust undo/redo stacks. It automatically tracks changes made to your state!
+### `ALStore` / `ALStorage` Core Methods
 
-```typescript
-import { ALStore, createHistoryAdapter } from '@angular-libs/store';
-
-interface DocumentState {
-  title: string;
-  content: string;
-}
-
-interface State {
-  document: DocumentState;
-  unsavedChanges: boolean;
-}
-
-const initialState: State = {
-  document: { title: 'Untitled', content: '' },
-  unsavedChanges: false,
-};
-
-@Injectable({ providedIn: 'root' })
-export class DocumentStore extends ALStore<State> {
-  // Automatically tracks any changes made to 'document'
-  documentHistory = createHistoryAdapter(this.storeRef, 'document', { limit: 20 });
-
-  constructor() {
-    super(initialState);
-  }
-
-  updateContent(newContent: string) {
-    // Normal store updates are automatically recorded in the history!
-    this.update('document', (doc) => ({ ...doc, content: newContent }));
-    this.set('unsavedChanges', true);
-  }
-}
-
-// In your component or template:
-// const store = inject(DocumentStore);
-//
-// <textarea (input)="store.updateContent($event.target.value)"></textarea>
-//
-// <button
-//   [disabled]="!store.documentHistory.canUndo()"
-//   (click)="store.documentHistory.undo()">
-//   Undo
-// </button>
-//
-// <button
-//   [disabled]="!store.documentHistory.canRedo()"
-//   (click)="store.documentHistory.redo()">
-//   Redo
-// </button>
-```
-
----
-
-## API & Interfaces
-
-- `IALStore<T>` (Implemented by both `ALStore` and `ALStorage`)
-
-- `select(projector)`: Computes derived state elegantly using a reactive proxy over your state object.
-- `getSignal(key)`: Retrieves a reactive readonly Angular `Signal` for a specific key.
-- `get(key)`: Retrieves data statically from the store without creating a reactive dependency.
-- `snapshot()`: Retrieves a synchronous snapshot of the entire current state object. Useful for logging or hydration.
-- `set(key, value)`: Sets typed data and broadcasts changes to any observing signals (and other tabs if configured).
-- `update(key, updateFn)`: Safely updates a value based on its previous state using a callback.
-- `patchState(stateOrUpdater)`: Safely updates multiple properties in the state object at once (accepts an object or an updater function).
+- `getSignal(key)`: Retrieves a reactive readonly Angular Signal for a specific property.
+- `get(key)`: Retrieves the current synchronous snapshot value without reactivity.
+- `set(key, val)`: Updates a value directly and triggers reactive updates.
+- `update(key, fn)`: Safely mutates a value using a callback based on the previous state.
+- `patchState(stateOrUpdater)`: Modifies multiple state object properties simultaneously.
+- `select(projector)`: Creates a reactive, memoized derived state Signal using a proxy-based callback.
+- `snapshot()`: Retrieves a synchronous snapshot of the entire current state object.
 - `reset(key?)`: Resets a specific key (or the entire store if omitted) back to its `initialState`.
 
 ### Adapters
 
-- `createEntityAdapter(store, key, options)`
-- `createResourceAdapter(store, key, options)`
-- `createRxResourceAdapter(store, key, options)` (from `@angular-libs/store/rxjs-interop`)
-- `createHistoryAdapter(store, key, options)`
-
----
+- `createEntityAdapter`: Simplifies array management with built-in CRUD operations (`all()`, `addOne(entity)`, `addMany(entities)`, `upsertOne(entity)`, `upsertMany(entities)`, `updateOne(update)`, `removeOne(id)`, `removeMany(ids)`, `setAll(entities)`, `removeAll()`).
+- `createResourceAdapter`: Manages Promise-based fetching with automatic cancellation, exposing `value()`, `isLoading()`, and `reload()` signals.
+- `createRxResourceAdapter`: Seamlessly bridges RxJS Observables into your synchronous state (via `@angular-libs/store/rxjs-interop`).
+- `createHistoryAdapter`: Adds instant time-travel capabilities (`undo()`, `redo()`, `canUndo()`, `canRedo()`) to any property in your store.
 
 ## 🤖 AI / GitHub Copilot Instructions
 
@@ -374,8 +94,7 @@ Want to generate your stores automatically? Copy the prompt below and paste it i
 <details>
 <summary><b>Click to view the AI Rules</b></summary>
 
-\`\`\`markdown
-
+````markdown
 # State Management AI Rules
 
 When creating or interacting with state management in this project, ALWAYS use `@angular-libs/store`.
@@ -384,116 +103,105 @@ Do NOT use NgRx, Akita, or plain BehaviorSubjects for stores.
 ## 1. Creating a Store
 
 - **Base Class**: Extend `ALStore<AppState>` (in-memory) or `ALStorage<AppState>` (persistent).
-- **Setup**: Define an interface `AppState` and a strongly-typed `initialState` object. Call `super(initialState)` in the `@Injectable({ providedIn: 'root' })` class constructor.
-- **Adapters**:
-  - _Collections/Arrays_: `myEntities = createEntityAdapter(this.storeRef, 'key', { idField: 'id' })`
-  - _Async Data/API HTTP_: `myRes = createResourceAdapter(this.storeRef, 'key', { params, loader })` (or `createRxResourceAdapter` for RxJS)
-  - _Time Travel_: `myHistory = createHistoryAdapter(this.storeRef, 'key', { limit: 10 })`
+- **Setup**: Define an interface `AppState` and a strongly-typed `initialState` object. Call `super(initialState)` in the `@Injectable({ providedIn: 'root' })` constructor.
+- **Cross-Tab Sync**: Pass `{ syncChannel: 'channel_name' }` as the second argument to `super()` to enable native cross-tab synchronization.
 
-## 2. Consuming & Mutating in Components
+## 2. Adapters & APIs
+
+- **EntityAdapter (Arrays/CRUD)**: `myEntities = createEntityAdapter(this.storeRef, 'key', { idField: 'id' })`
+  - _Methods_: `addOne(entity)`, `upsertOne(entity)`, `removeOne(id)`, `updateOne({ id, changes })`, `setAll(entities)`, `removeAll()`
+  - _State_: `this.store.myEntities.all()`, `this.store.myEntities.total()`
+- **ResourceAdapter (Promises/Fetch)**: `myRes = createResourceAdapter(this.storeRef, 'key', { params: () => ({ id: this.getSignal('id')() }), loader: async ({ params, abortSignal }) => fetch(...) })`
+  - _State_: `this.store.myRes.value()`, `this.store.myRes.isLoading()`, `this.store.myRes.reload()`
+- **RxResourceAdapter (RxJS/Observables)**: Must import from `@angular-libs/store/rxjs-interop`.
+  - _Usage_: `myRx = createRxResourceAdapter(this.storeRef, 'key', { params: () => ..., loader: ({ params }) => this.http.get(...) })`
+- **HistoryAdapter (Undo/Redo)**: `myHistory = createHistoryAdapter(this.storeRef, 'key', { limit: 10 })`
+  - _Methods_: `undo()`, `redo()`, `canUndo()`, `canRedo()`
+
+## 3. Consuming & Mutating in Components
 
 - Access primitive state natively as Signals: `myVal = this.store.getSignal('key')`.
 - Access derived state (selectors): `activeTodos = this.store.select(state => state.todos.filter(t => t.done))`.
-- For adapters, use their properties directly: `this.store.myEntities.items()` or `this.store.myRes.isLoading()`.
-- **Mutations**: Call `this.store.set('key', value)`, `this.store.update('key', fn)`, or `this.store.patchState({ ... })` / `this.store.patchState(state => ...)` directly from components for simple state changes. Only write custom methods in the store for complex/multi-key logic.
-- **Constraint**: DO NOT use RxJS observables or `.subscribe()` for state consumption; rely exclusively on Angular Signals.
-- **Immutability Requirement**: Angular Signals rely on `Object.is` for equality. When updating objects or arrays, you **must return a new reference** (e.g., using spread syntax `{ ...state, key: val }` or Array `.map()`). Direct mutations like `array.push(1)` or `user.name = 'John'` will NOT trigger template updates.
+- **Mutations**: Call `this.store.set('key', value)`, `this.store.update('key', state => newState)`, or `this.store.patchState({ ... })` directly.
+- **Immutability Requirement**: Use spread syntax or array methods that return new references.
 
-## 3. Reference Example
+## 4. Reference Example
 
 ```typescript
 import { Component, inject, Injectable } from '@angular/core';
 import {
   ALStore,
   createEntityAdapter,
-  createResourceAdapter,
   createHistoryAdapter,
+  createResourceAdapter,
 } from '@angular-libs/store';
+import { createRxResourceAdapter } from '@angular-libs/store/rxjs-interop';
 
-// 1. Define State & Initial Values
 interface Todo {
   id: number;
   title: string;
   done: boolean;
 }
 interface AppState {
+  currentUserId: number;
   todos: Todo[];
-  filter: 'all' | 'pending';
+  filter: 'all' | 'pending' | 'completed';
 }
-const initialState: AppState = { todos: [], filter: 'all' };
 
-// 2. Create Store (No boilerplate required!)
+const initialState: AppState = { currentUserId: 1, todos: [], filter: 'all' };
+
 @Injectable({ providedIn: 'root' })
 export class TodoStore extends ALStore<AppState> {
-  // Fetch reactively; automatically refetches when 'filter' signal changes
+  // 1. Entity Adapter for array CRUD
+  todos = createEntityAdapter(this.storeRef, 'todos', { idField: 'id' });
+
+  // 2. History Adapter for instant Undo/Redo tracking
+  todoHistory = createHistoryAdapter(this.storeRef, 'todos', { limit: 20 });
+
+  // 3. Resource Adapter for Async/Fetch integration (syncs directly into the 'todos' array!)
   todoResource = createResourceAdapter(this.storeRef, 'todos', {
-    params: () => ({ filter: this.getSignal('filter')() }),
+    params: () => ({ userId: this.getSignal('currentUserId')() }),
     loader: async ({ params, abortSignal }) => {
-      const res = await fetch(`/api/todos?filter=${params.filter}`, { signal: abortSignal });
+      const res = await fetch(`/api/todos?userId=${params.userId}`, { signal: abortSignal });
       return res.json();
     },
   });
 
-  // Bind adapters for collections to automatically get CRUD methods
-  todos = createEntityAdapter(this.storeRef, 'todos', { idField: 'id' });
-  // Instantly add Undo/Redo capabilities to the todos array!
-  todoHistory = createHistoryAdapter(this.storeRef, 'todos', { limit: 10 });
+  // 4. Reactive Selectors
+  derivedTodos = this.select((state) => {
+    if (state.filter === 'pending') return state.todos.filter((t) => !t.done);
+    if (state.filter === 'completed') return state.todos.filter((t) => t.done);
+    return state.todos;
+  });
 
-  // Pure, reactive derived state using Proxy access
-  pendingCount = this.select((state) => state.todos.filter((t) => !t.done).length);
+  stats = this.select((state) => {
+    const total = state.todos.length;
+    const pending = state.todos.filter((t) => !t.done).length;
+    return { total, pending, completed: total - pending };
+  });
 
   constructor() {
+    // Optional: Pass `{ syncChannel: 'todos_sync' }` here to synchronize state across tabs automatically!
     super(initialState);
   }
-}
 
-// 3. Consume & Mutate in Component
-@Component({
-  selector: 'app-todos',
-  standalone: true,
-  template: `
-    <!-- Simple scalar updates -->
-    <button (click)="store.set('filter', filter() === 'all' ? 'pending' : 'all')">
-      Toggle Filter (Current: {{ filter() }})
-    </button>
+  // 5. Custom Actions (Mutations)
+  addTodo(title: string) {
+    this.todos.upsertOne({ id: Date.now(), title, done: false });
+  }
 
-    <!-- HistoryAdapter Undo/Redo -->
-    <button [disabled]="!store.todoHistory.canUndo()" (click)="store.todoHistory.undo()">
-      Undo
-    </button>
-    <button [disabled]="!store.todoHistory.canRedo()" (click)="store.todoHistory.redo()">
-      Redo
-    </button>
-
-    <!-- ResourceAdapter loading state -->
-    @if (store.todoResource.isLoading()) {
-      <p>Loading todos...</p>
-    }
-
-    <!-- Adapter usage (Signal access & mutations) -->
-    @for (todo of store.todos.items(); track todo.id) {
-      <div>
-        {{ todo.title }} - {{ todo.done ? 'Done' : 'Open' }}
-        <button (click)="store.todos.update(todo.id, { done: true })">Complete</button>
-        <button (click)="store.todos.remove(todo.id)">Delete</button>
-      </div>
-    }
-
-    <button (click)="store.todos.upsert({ id: Date.now(), title: 'New', done: false })">
-      Add Todo
-    </button>
-  `,
-})
-export class TodoComponent {
-  store = inject(TodoStore);
-  filter = this.store.getSignal('filter'); // Signal<"all" | "pending">
+  toggleFilter() {
+    this.update('filter', (current) => (current === 'all' ? 'pending' : 'all'));
+  }
 }
 ```
+````
 
-\`\`\`
+```
 
 </details>
 
 ## License
 
 MIT
+```
