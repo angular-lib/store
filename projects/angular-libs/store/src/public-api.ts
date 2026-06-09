@@ -3,9 +3,9 @@
  */
 
 export * from './lib/interfaces';
-export { ALStorage, provideSignalStorageConfig, SIGNAL_STORAGE_CONFIG } from './lib/al-storage';
 export { ALStore } from './lib/al-store';
 
-export { createEntityAdapter } from './lib/adapters/entity.adapter';
-export { createResourceAdapter } from './lib/adapters/resource.adapter';
-export { createHistoryAdapter } from './lib/adapters/history.adapter';
+export { entityPlugin } from './lib/plugins/entity.plugin';
+export { resourcePlugin } from './lib/plugins/resource.plugin';
+export { historyPlugin } from './lib/plugins/history.plugin';
+export { persistPlugin } from './lib/plugins/persist.plugin';

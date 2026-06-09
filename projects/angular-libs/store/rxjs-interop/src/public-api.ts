@@ -1,1 +1,1 @@
-export * from './lib/rx-resource.adapter';
+export * from './lib/plugins/rx-resource.plugin';

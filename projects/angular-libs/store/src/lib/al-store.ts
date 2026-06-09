@@ -8,7 +8,7 @@ import {
   computed,
 } from '@angular/core';
 import { SyncMessage } from './sync-message';
-import { ALStoreConfig } from './interfaces';
+import { ALStoreConfig, ALStorePlugin } from './interfaces';
 import { IALStore } from './interfaces/ial-store';
 
 /**
@@ -16,9 +16,9 @@ import { IALStore } from './interfaces/ial-store';
  * It provides a centralized, type-safe store for managing application or feature state, with built-in support for
  * cross-tab synchronization via `BroadcastChannel`.
  *
- * Key Features:
+ * * Key Features:
  * - **Reactive State**: Exposes state as Angular Signals (`getSignal`) for seamless integration with templates and `computed`/`effect` functions.
- * - **Adapters**: Utilize `createEntityAdapter()` for CRUD array operations, `createResourceAdapter()` to bridge with async HTTP requests seamlessly, or `createHistoryAdapter()` for instant undo/redo capabilities.
+ * - **Plugins**: Utilize `entityPlugin()` for CRUD array operations, `resourcePlugin()` to bridge with async HTTP requests seamlessly, or `historyPlugin()` for instant undo/redo capabilities.
  * - **Synchronous Access**: Allows imperative read/write operations (`get`, `set`, `update`) for non-reactive contexts.
  * - **Cross-Tab Sync**: Automatically synchronizes state changes across browser windows/tabs when a `syncChannel` is provided.
  * - **Initial State Management**: Preserves default values, allowing safe fallback when state items are reset.
@@ -42,20 +42,20 @@ import { IALStore } from './interfaces/ial-store';
  *   document: ''
  * };
  *
- * // 2. Create a typed service utilizing both primitive state and adapters
+ * // 2. Create a typed service utilizing both primitive state and plugins
  * @Injectable({ providedIn: 'root' })
  * export class AppStore extends ALStore<AppState> {
  *   // Array CRUD operations bound to 'users'
- *   usersAdapter = createEntityAdapter(this.storeRef, 'users', { idField: 'id' });
+ *   usersAdapter = this.registerPlugin(entityPlugin('users', { idField: 'id' }));
  *
  *   // Async data fetching bound to 'profile', refetching when 'selectedUserId' changes
- *   profileResource = createResourceAdapter(this.storeRef, 'profile', {
+ *   profileResource = this.registerPlugin(resourcePlugin('profile', {
  *     params: () => ({ id: this.getSignal('selectedUserId')() }),
  *     loader: async ({ params, abortSignal }) => fetchProfile(params.id, abortSignal)
- *   });
+ *   }));
  *
  *   // Undo/redo tracking bound to 'document'
- *   documentHistory = createHistoryAdapter(this.storeRef, 'document', { limit: 10 });
+ *   documentHistory = this.registerPlugin(historyPlugin('document', { limit: 10 }));
  *
  *   constructor() {
  *     super(initialState, { syncChannel: 'app_store_sync' });
@@ -92,8 +92,15 @@ export abstract class ALStore<T extends Record<string, any> = {}> implements IAL
   protected initialState: T;
   private state: Partial<T> = {};
   private signals = new Map<keyof T, WritableSignal<any>>();
+  private plugins: ALStorePlugin<T>[] = [];
   private channel?: BroadcastChannel;
   private destroyRef = inject(DestroyRef);
+
+  protected registerPlugin<P extends ALStorePlugin<T>>(plugin: P): P {
+    plugin.onInit?.(this);
+    this.plugins.push(plugin);
+    return plugin;
+  }
 
   constructor(initialState?: T, config?: ALStoreConfig) {
     this.initialState = initialState || ({} as T);
@@ -155,8 +162,18 @@ export abstract class ALStore<T extends Record<string, any> = {}> implements IAL
   }
 
   private internalSet<K extends keyof T>(key: K, value: T[K]): void {
-    this.state[key] = value;
-    this.updateSignal(key, value);
+    const prevValue = this.get(key);
+    let finalValue = value;
+    for (const plugin of this.plugins) {
+      if (plugin.onBeforeUpdate) {
+        finalValue = plugin.onBeforeUpdate(key, prevValue, finalValue);
+      }
+    }
+    this.state[key] = finalValue;
+    this.updateSignal(key, finalValue);
+    for (const plugin of this.plugins) {
+      plugin.onAfterUpdate?.(key, prevValue, finalValue);
+    }
   }
 
   update<K extends keyof T>(key: K, updateFn: (currentValue: T[K]) => T[K]): void {
@@ -203,12 +220,48 @@ export abstract class ALStore<T extends Record<string, any> = {}> implements IAL
 
   private internalReset<K extends keyof T>(key?: K): void {
     if (key !== undefined) {
+      const prevValue = this.get(key);
+      const initialVal = this.initialState?.[key];
+      let finalValue = initialVal;
+      for (const plugin of this.plugins) {
+        if (plugin.onBeforeUpdate) {
+          finalValue = plugin.onBeforeUpdate(key, prevValue, finalValue);
+        }
+      }
       delete this.state[key];
+      if (finalValue !== initialVal) {
+        this.state[key] = finalValue as any;
+      }
       this.updateSignalWithInitialState(key);
+      if (finalValue !== initialVal) {
+        this.updateSignal(key, finalValue);
+      }
+      for (const plugin of this.plugins) {
+        plugin.onAfterUpdate?.(key, prevValue, finalValue);
+      }
     } else {
+      const prevSnapshot = this.snapshot();
       this.state = {};
-      for (const k of this.signals.keys()) {
+      const keysArray = Array.from(new Set([...Object.keys(this.initialState || {}), ...Object.keys(prevSnapshot)])) as (keyof T)[];
+      for (const k of keysArray) {
+        const prevValue = prevSnapshot[k];
+        const initialVal = this.initialState?.[k];
+        let finalValue = initialVal;
+        for (const plugin of this.plugins) {
+          if (plugin.onBeforeUpdate) {
+            finalValue = plugin.onBeforeUpdate(k, prevValue, finalValue);
+          }
+        }
+        if (finalValue !== initialVal) {
+          this.state[k] = finalValue as any;
+        }
         this.updateSignalWithInitialState(k);
+        if (finalValue !== initialVal) {
+          this.updateSignal(k, finalValue);
+        }
+        for (const plugin of this.plugins) {
+          plugin.onAfterUpdate?.(k, prevValue, finalValue);
+        }
       }
     }
   }

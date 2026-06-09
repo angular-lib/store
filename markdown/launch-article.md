@@ -20,11 +20,11 @@ Instead of just providing a basic state container, `@angular-libs/store` comes f
 
 - **🛠 OOP-First Design:** Build your stores using familiar class inheritance and methods.
 - **💾 In-Memory State:** Fast `ALStore` for your typical localized component, feature, or global state.
-- **💾 Storage:** Built-in `ALStorage` capabilities to easily persist state to localStorage or sessionStorage.
-- **📦 Entity Management:** Built-in `EntityAdapter` for easily managing collections of records (CRUD operations, sorting, and selection).
-- **🌐 Native Resource API Integration:** Seamless `ResourceAdapter` integration for handling asynchronous data fetching gracefully.
-- **⏪ Undo/Redo History:** Time-travel made easy with the `HistoryAdapter`.
-- **🔄 Cross-Tab Sync:** Keep your state perfectly in sync across multiple browser tabs out of the box.
+- **💾 Selective Persistence:** Easily serialize and synchronize state keys to localStorage/sessionStorage/custom storage using the modular `persistPlugin`.
+- **📦 Entity Management:** Modular `entityPlugin` for easily managing collections of records (CRUD operations, sorting, and selection).
+- **🌐 Native Resource API Integration:** Seamless `resourcePlugin` integration for handling asynchronous data fetching gracefully.
+- **⏪ Undo/Redo History:** Time-travel made easy with the `historyPlugin`.
+- **🔄 Cross-Tab Sync:** Fully automatic real-time state synchronization across tabs via `BroadcastChannel` or `persistPlugin`.
 - **🚫 100% RxJS-Free:** Built entirely from the ground up using Angular Signals.
 
 ## 💻 Let's see some code!
@@ -35,13 +35,13 @@ Instead of just providing a basic state container, `@angular-libs/store` comes f
 npm install @angular-libs/store
 ```
 
-### 2. A Complete Example: The Power of Adapters & Sync
+### 2. A Complete Example: The Power of Plugins & Sync
 
 Instead of writing endless boilerplate across multiple files, watch how we can create a fully reactive, cross-tab synchronized store that handles a list of entities (CRUD) and an asynchronous resource (API fetching) in under 30 lines of code.
 
 ```typescript
 import { Injectable } from '@angular/core';
-import { ALStore } from '@angular-libs/store';
+import { ALStore, entityPlugin, historyPlugin, resourcePlugin } from '@angular-libs/store';
 
 interface User {
   id: number;
@@ -67,29 +67,31 @@ const initialState: AppState = {
 
 @Injectable({ providedIn: 'root' })
 export class AppStore extends ALStore<AppState> {
-  // 1. 📦 Entity Adapter: Instant CRUD operations for arrays
-  todos = this.entityAdapter('todos', { idField: 'id' });
+  // 1. 📦 Entity Plugin: Instant CRUD operations for arrays
+  todos = this.registerPlugin(entityPlugin('todos', { idField: 'id' }));
 
-  // 2. ⏪ History Adapter: Instantly enable undo/redo for your todos
-  todosHistory = this.historyAdapter('todos');
+  // 2. ⏪ History Plugin: Instantly enable undo/redo for your todos
+  todosHistory = this.registerPlugin(historyPlugin('todos'));
 
-  // 3. 🌐 Resource Adapter: Native async integration with loading states
-  userResource = this.resourceAdapter('currentUser', {
-    // Reactively pass parameters to the loader
-    params: () => ({ userId: this.getSignal('currentUserId')() }),
-    loader: async ({ params, abortSignal }) => {
-      if (!params.userId) return null;
-      const res = await fetch(`/api/users/${params.userId}`, { signal: abortSignal });
-      return res.json();
-    },
-  });
+  // 3. 🌐 Resource Plugin: Native async integration with loading states
+  userResource = this.registerPlugin(
+    resourcePlugin('currentUser', {
+      // Reactively pass parameters to the loader
+      params: () => ({ userId: this.getSignal('currentUserId')() }),
+      loader: async ({ params, abortSignal }) => {
+        if (!params.userId) return null;
+        const res = await fetch(`/api/users/${params.userId}`, { signal: abortSignal });
+        return res.json();
+      },
+    })
+  );
 
   constructor() {
     // 4. 💾 Cross-Tab Sync: Share state instantly across browser tabs
     super(initialState, { syncChannel: 'app_sync_channel' });
   }
 
-  // Utilize the entity adapter's built-in methods
+  // Utilize the entity plugin's built-in methods
   addTodo(title: string) {
     // We can also patch the state directly, a familiar pattern:
     // this.patchState({ currentUserId: 99 });

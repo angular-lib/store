@@ -1,7 +1,19 @@
 # Changelog
 
-
-- feat: add public `snapshot()` method  (tag: v0.2.1) - 2026-04-19
+- feat: add `persist` plugin to store (b5fbcb9) - 2026-06-09
+  - Introduced the new `persistPlugin` to replace the old storage system.
+  - **BREAKING CHANGES**:
+    - **Removed `ALStorage` API**: `ALStorage`, `provideSignalStorageConfig`, and `SIGNAL_STORAGE_CONFIG` have been completely removed.
+    - **Renamed Adapters to Plugins**: Transitioned from adapter orchestration to tree-shakable functional store plugins.
+      - Global `createXAdapter` helper functions have been deprecated/removed and replaced with clean `XPlugin` factory functions.
+      - First parameter `store` removed. Register now via `this.registerPlugin(...)` within the store.
+      - `createEntityAdapter` -> `entityPlugin`
+      - `createHistoryAdapter` -> `historyPlugin`
+      - `createResourceAdapter` -> `resourcePlugin`
+      - `createRxResourceAdapter` -> `rxResourcePlugin` (under `@angular-libs/store/rxjs-interop` package)
+    - **File / Directory Renames**: Renamed `.adapter.ts` to `.plugin.ts` and moved adapters inside the `adapters` folder to the `plugins` folder.
+- docs: simplify `README.md`  - 2026-04-21
+- feat: add public `snapshot()` method  - 2026-04-19
 - feat: add `select()` method for derived state  - 2026-04-19
 - refactor: combine api `remove` and `clear` into `reset`  (tag: v0.2.0) - 2026-04-19
 - feat: add `patchState`  (tag: v0.1.3) - 2026-04-19

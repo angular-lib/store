@@ -1,54 +1,50 @@
 import { computed, Signal } from '@angular/core';
-import { EntityAdapter, EntityAdapterOptions, Update } from '../interfaces/entity.adapter';
+import { EntityAdapter, EntityAdapterOptions, Update } from '../interfaces/entity.plugin';
 import { IALStore } from '../interfaces/ial-store';
+import { ALStorePlugin } from '../interfaces/al-store-plugin';
 
 /**
- * Creates an entity adapter for managing collections of entities within an ALStore.
- * Provides a standardized set of methods (add, update, remove, etc.) to manipulate
+ * Creates a functional entity plugin for managing collections of entities within an ALStore.
+ * Provides a highly optimized, standardize set of methods (add, update, remove, etc.) to manipulate
  * array-based state and signals to read the state.
  *
  * @template StoreState The overall state interface of the store.
  * @template Key The specific key in the store state corresponding to this entity collection.
- * @template T The entity type.
  * @template ID The identifier type for the entity (e.g., string or number).
  *
- * @param store The ALStore instance managing the state.
  * @param key The state property key corresponding to the entity array.
  * @param options Configuration options including ID selection and sorting.
- * @returns An EntityAdapter object with state signals and mutation methods.
+ * @returns An EntityAdapter object with state signals and mutation methods which implements ALStorePlugin.
  *
  * @example
  * ```ts
  * interface User { id: number; name: string; }
  * interface AppState { users: User[]; }
- *
  * const initialState: AppState = { users: [] };
  *
  * @Injectable({ providedIn: 'root' })
  * export class UserStore extends ALStore<AppState> {
- *   // Create the adapter, using `this.storeRef` to correctly infer types
- *   users = createEntityAdapter(this.storeRef, 'users', { idField: 'id' });
+ *   // Register the entity plugin directly as a class property
+ *   users = this.registerPlugin(entityPlugin('users', { idField: 'id' }));
  *
  *   constructor() {
- *     super(initialState); // Initialize the state
+ *     super(initialState);
  *   }
  *
- *   // Use adapter methods to mutate the state
  *   registerUser(user: User) {
  *     this.users.addOne(user);
  *   }
  * }
  * ```
  */
-export function createEntityAdapter<
+export function entityPlugin<
   StoreState extends Record<string, any>,
   Key extends keyof StoreState,
   ID extends string | number = string | number,
 >(
-  store: IALStore<StoreState>,
   key: Key,
   options: EntityAdapterOptions<StoreState[Key] extends Array<infer U> ? U : any, ID> = {} as any,
-): EntityAdapter<StoreState[Key] extends Array<infer U> ? U : any, ID> {
+): ALStorePlugin<StoreState> & EntityAdapter<StoreState[Key] extends Array<infer U> ? U : any, ID> {
   type T = StoreState[Key] extends Array<infer U> ? U : Record<string, any>;
   const selectId: (entity: T) => ID =
     options.selectId ||
@@ -57,11 +53,17 @@ export function createEntityAdapter<
       : (entity: any) => entity.id as ID);
   const sortComparer = options.sortComparer;
 
-  const rawSignal = store.getSignal(key) as unknown as Signal<T[] | undefined>;
-  const stateSignal = computed(() => rawSignal() ?? []);
+  let storeRef: IALStore<StoreState>;
+
+  const stateSignal = computed(() => {
+    if (!storeRef) return [] as T[];
+    const rawSignal = storeRef.getSignal(key) as unknown as Signal<T[] | undefined>;
+    return rawSignal() ?? [] as T[];
+  });
 
   const updateState = (updater: (state: T[]) => T[]) => {
-    store.update(key, (s: any) => updater(Array.isArray(s) ? s : []) as any);
+    if (!storeRef) return;
+    storeRef.update(key, (s: any) => updater(Array.isArray(s) ? s : []) as any);
   };
 
   function sortIfNeeded(arr: T[]): T[] {
@@ -71,7 +73,11 @@ export function createEntityAdapter<
     return arr;
   }
 
-  const adapter: EntityAdapter<T, ID> = {
+  const adapter: ALStorePlugin<StoreState> & EntityAdapter<T, ID> = {
+    onInit(store) {
+      storeRef = store;
+    },
+
     state: stateSignal,
     all: stateSignal,
     total: computed(() => stateSignal().length),
