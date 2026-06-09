@@ -1,0 +1,12 @@
+/* You can add global styles to this file, and also import other style files */
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: #f8fafc;
+  transition: background-color 0.3s ease;
+}
+
+/* Sync root html/body with store theme toggles */
+html:has(.dark-theme), body:has(.dark-theme) {
+  background-color: #0f172a;
+}

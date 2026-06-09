@@ -1,0 +1,151 @@
+<div class="demo-container" [class.dark-theme]="store.getSignal('theme')() === 'dark'">
+  
+  <!-- Header -->
+  <header class="header">
+    <h1>
+      ⚡ ALStore <span>Demo</span>
+      <span class="theme-badge">{{ store.getSignal('theme')() }} mode</span>
+    </h1>
+    <button class="btn btn-secondary" (click)="store.toggleTheme()">
+      🎨 {{ store.getSignal('theme')() === 'light' ? 'Dark Theme' : 'Light Theme' }}
+    </button>
+  </header>
+
+  <main class="dashboard">
+
+    <!-- Column 1: Todo Management (entityPlugin & historyPlugin) -->
+    <section class="card">
+      <h2>
+        <span>Task Manager</span>
+        <span class="badge">{{ store.getSignal('todos')().length }}</span>
+      </h2>
+
+      <!-- Todo History Stack Actions -->
+      <div class="history-panel">
+        <span class="history-label">⏳ Todo History:</span>
+        <button 
+          class="btn btn-secondary" 
+          [disabled]="!store.todoHistory.canUndo()"
+          (click)="store.todoHistory.undo()">
+          ↩️ Undo
+        </button>
+        <button 
+          class="btn btn-secondary" 
+          [disabled]="!store.todoHistory.canRedo()"
+          (click)="store.todoHistory.redo()">
+          ↪️ Redo
+        </button>
+      </div>
+
+      <!-- Add Todo Form -->
+      <form class="todo-input-form" (submit)="addTodo($event, todoInput.value); todoInput.value = ''">
+        <input 
+          #todoInput
+          type="text" 
+          class="input-ctrl" 
+          placeholder="What needs to be done? (Press Enter)"
+          required />
+        <button type="submit" class="btn btn-primary" aria-label="Add Task">
+          <svg xmlns="http://www.w3.org/2000/svg" height="18" viewBox="0 -960 960 960" width="18" fill="currentColor">
+            <path d="M440-440H200v-80h240v-240h80v240h240v80H520v240h-80v-240Z"/>
+          </svg>
+          Add
+        </button>
+      </form>
+
+      <!-- Todo List -->
+      <ul class="todo-list">
+        @for (todo of store.getSignal('todos')(); track todo.id) {
+          <li 
+            class="todo-item" 
+            [class.completed]="todo.completed"
+            [class.selected]="store.getSignal('selectedTodoId')() === todo.id"
+            (click)="selectTodo(todo.id)">
+            
+            <div class="todo-item-left">
+              <input 
+                type="checkbox" 
+                class="checkbox"
+                [checked]="todo.completed"
+                (change)="toggleTodo(todo); $event.stopPropagation()" />
+              <span class="todo-text">{{ todo.text }}</span>
+            </div>
+
+            <div class="actions-panel">
+              <button 
+                class="btn btn-danger" 
+                style="padding: 0.35rem; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; border-radius: 6px;" 
+                aria-label="Delete Task"
+                (click)="removeTodo(todo.id); $event.stopPropagation()">
+                <svg xmlns="http://www.w3.org/2000/svg" height="16" viewBox="0 -960 960 960" width="16" fill="currentColor">
+                  <path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T760-120H280Zm80-160h80v-320h-80v320Zm160 0h80v-320h-80v320Z"/>
+                </svg>
+              </button>
+            </div>
+
+          </li>
+        } @empty {
+          <div class="empty-state">
+            🎉 All done! Add a new task above or click Undo to restore.
+          </div>
+        }
+      </ul>
+    </section>
+
+    <!-- Column 2: Document Editor & Async Resource Loader (resourcePlugin & historyPlugin) -->
+    <section class="card">
+      <h2>Interactive Documentation</h2>
+
+      <!-- Editor History stack -->
+      <div class="history-panel">
+        <span class="history-label">⏳ Doc History:</span>
+        <button 
+          class="btn btn-secondary" 
+          [disabled]="!store.docHistory.canUndo()"
+          (click)="store.docHistory.undo()">
+          ↩️ Undo
+        </button>
+        <button 
+          class="btn btn-secondary" 
+          [disabled]="!store.docHistory.canRedo()"
+          (click)="store.docHistory.redo()">
+          ↪️ Redo
+        </button>
+      </div>
+
+      <!-- Dynamic Documentation editor -->
+      <label style="display: block; margin-bottom: 0.5rem; font-size: 0.85rem; font-weight: 600; color: var(--text-secondary);">
+        DOCUMENT TEXT (Safe state edits):
+      </label>
+      <textarea 
+        class="editor-textarea"
+        [value]="store.getSignal('dummyDoc')()"
+        (input)="updateDoc($event)">
+      </textarea>
+
+      <!-- Resource description resolving asynchronously -->
+      <label style="display: block; margin-top: 1.5rem; font-size: 0.85rem; font-weight: 600; color: var(--text-secondary);">
+        ASYNC DESCRIPTION LOADER:
+      </label>
+      
+      @if (store.infoResource.isLoading()) {
+        <div class="resource-desc" style="justify-content: center;">
+          <div class="loading-indicator">
+            <span class="spinner"></span> Resolving from mock database...
+          </div>
+        </div>
+      } @else {
+        <p class="resource-desc">
+          💡 {{ store.infoResource.value() }}
+        </p>
+      }
+
+      <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem; font-size: 0.8rem; color: var(--text-secondary);">
+        <strong>💡 Note:</strong> Toggling theme, editing todos, and documentation edits are all fully atomic, reactive mutations tracked cleanly using core <code>@angular-libs/store</code> functional plugins.
+      </div>
+    </section>
+
+  </main>
+
+</div>
+

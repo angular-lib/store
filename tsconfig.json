@@ -4,7 +4,8 @@
   "compileOnSave": false,
   "compilerOptions": {
     "paths": {
-      "@angular-libs/store": ["./dist/angular-libs/store"]
+      "@angular-libs/store": ["./projects/angular-libs/store/src/public-api.ts"],
+      "@angular-libs/store/rxjs-interop": ["./projects/angular-libs/store/rxjs-interop/src/public-api.ts"]
     },
     "strict": true,
     "noImplicitOverride": true,
@@ -31,6 +32,12 @@
     },
     {
       "path": "./projects/angular-libs/store/tsconfig.spec.json"
+    },
+    {
+      "path": "./projects/demo/tsconfig.app.json"
+    },
+    {
+      "path": "./projects/demo/tsconfig.spec.json"
     }
   ]
 }

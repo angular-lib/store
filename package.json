@@ -3,7 +3,8 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
+    "start": "ng serve demo",
+    "start:demo": "ng serve demo",
     "build": "npm run generate-changelog && ng build && npm run copy-changelog",
     "generate-changelog": "echo '# Changelog\n\n' > projects/angular-libs/store/CHANGELOG.md && git log --oneline --format='- %s %d - %ad' --date=short --decorate-refs=refs/tags >> projects/angular-libs/store/CHANGELOG.md",
     "watch": "ng build --watch --configuration development",
